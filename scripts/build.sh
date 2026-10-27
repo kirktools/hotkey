@@ -1,0 +1,23 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+configuration="${1:-debug}"
+case "$configuration" in debug|release) ;; *) echo "用法：scripts/build.sh [debug|release]" >&2; exit 2 ;; esac
+./scripts/swift.sh build -c "$configuration"
+bin_path="$(./scripts/swift.sh build -c "$configuration" --show-bin-path)"
+app="dist/Hotkey.app"
+plugin="dist/NativeMessage.hotkeyplugin"
+mkdir -p "$app/Contents/MacOS" "$plugin/ExamplePlugin.app/Contents/MacOS"
+cp "$bin_path/Hotkey" "$app/Contents/MacOS/Hotkey"
+cp Resources/Info.plist "$app/Contents/Info.plist"
+cp "$bin_path/ExamplePlugin" "$plugin/ExamplePlugin.app/Contents/MacOS/ExamplePlugin"
+cp Resources/Info.plist "$plugin/ExamplePlugin.app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier dev.hotkey.example-plugin' "$plugin/ExamplePlugin.app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable ExamplePlugin' "$plugin/ExamplePlugin.app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleName ExamplePlugin' "$plugin/ExamplePlugin.app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName 原生窗口示例' "$plugin/ExamplePlugin.app/Contents/Info.plist"
+cp Examples/manifest.json "$plugin/manifest.json"
+codesign --force --sign - "$plugin/ExamplePlugin.app"
+codesign --force --sign - "$app"
+echo "已构建：$app"
+echo "示例插件：$plugin"

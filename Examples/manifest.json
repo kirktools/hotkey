@@ -1,0 +1,8 @@
+{
+  "id": "example.native-message",
+  "name": "原生窗口示例",
+  "version": "0.1.0",
+  "protocolVersion": 1,
+  "executable": "ExamplePlugin.app/Contents/MacOS/ExamplePlugin",
+  "commands": [{ "id": "show-message", "title": "显示示例窗口" }]
+}
