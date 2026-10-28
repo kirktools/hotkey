@@ -11,6 +11,14 @@ else
   app="dist/Hotkey.app"
 fi
 plugin="dist/NativeMessage.hotkeyplugin"
+mkdir -p .build/tools "$app/Contents/Resources"
+if [[ ! -x .build/tools/generate-icon || scripts/generate-icon.swift -nt .build/tools/generate-icon ]]; then
+  xcrun swiftc scripts/generate-icon.swift -module-cache-path "$PWD/.build/module-cache" -o .build/tools/generate-icon
+fi
+icon_mode="release"
+if [[ "$configuration" == debug ]]; then icon_mode="dev"; fi
+iconset=".build/tools/$icon_mode.iconset"
+.build/tools/generate-icon "$iconset" "$icon_mode" "$app/Contents/Resources/AppIcon.icns"
 mkdir -p "$app/Contents/MacOS" "$plugin/ExamplePlugin.app/Contents/MacOS"
 cp "$bin_path/Hotkey" "$app/Contents/MacOS/Hotkey"
 cp Resources/Info.plist "$app/Contents/Info.plist"
@@ -22,6 +30,7 @@ if [[ "$configuration" == debug ]]; then
 fi
 cp "$bin_path/ExamplePlugin" "$plugin/ExamplePlugin.app/Contents/MacOS/ExamplePlugin"
 cp Resources/Info.plist "$plugin/ExamplePlugin.app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c 'Delete :CFBundleIconFile' "$plugin/ExamplePlugin.app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier dev.hotkey.example-plugin' "$plugin/ExamplePlugin.app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable ExamplePlugin' "$plugin/ExamplePlugin.app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleName ExamplePlugin' "$plugin/ExamplePlugin.app/Contents/Info.plist"

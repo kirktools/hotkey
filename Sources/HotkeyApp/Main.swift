@@ -13,7 +13,7 @@ import Combine
 }
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let model = AppModel()
+    private let model = AppModel(builtins: BuiltinAssembly.make())
     private var statusItem: NSStatusItem!
     private var settingsWindow: NSWindow?
     private var subscription: AnyCancellable?
@@ -26,7 +26,10 @@ import Combine
             NSApp.terminate(nil); return
         }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "command", accessibilityDescription: "Hotkey")
+        statusItem.button?.image = NSImage(systemSymbolName: "command", accessibilityDescription: model.applicationName)
+        if Bundle.main.bundleIdentifier?.hasSuffix(".dev") == true {
+            statusItem.button?.title = " DEV"
+        }
         let mainMenu = NSMenu()
         let appMenuItem = NSMenuItem(); let appMenu = NSMenu()
         let quitItem = NSMenuItem(title: "退出 \(model.applicationName)", action: #selector(quit), keyEquivalent: "q")

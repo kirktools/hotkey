@@ -13,7 +13,7 @@ public struct PluginPackage {
         let data = try Data(contentsOf: self.root.appendingPathComponent("manifest.json"))
         guard data.count < 65_536 else { throw PluginError.message("插件清单过大。") }
         manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
-        guard Self.validID(manifest.id), manifest.id != "builtin.app-switcher",
+        guard Self.validID(manifest.id), !manifest.id.hasPrefix("builtin."),
               !manifest.name.isEmpty, !manifest.version.isEmpty,
               manifest.protocolVersion == PluginProtocol.version,
               !manifest.commands.isEmpty,

@@ -1,5 +1,5 @@
 import SwiftUI
-import AppSwitchPlugin
+import PluginSDK
 import HotkeyCore
 
 struct SettingsView: View {
@@ -17,7 +17,16 @@ struct SettingsView: View {
                 Button(model.paused ? "恢复快捷键" : "暂停快捷键") { model.togglePause() }
             }.padding(22)
             TabView {
-                applications.tabItem { Label("应用", systemImage: "app.badge") }
+                ForEach(model.builtins, id: \.pluginID) { plugin in
+                    plugin.makeSettings(context: PluginSettingsContext(
+                        bindings: model.configuration.bindings.filter { $0.pluginID == plugin.pluginID },
+                        enabled: model.builtinEnabled(plugin.pluginID),
+                        addBinding: { try model.addBinding($0, pluginID: plugin.pluginID) },
+                        reportError: { model.message = $0 },
+                        bindingRow: { AnyView(BindingRow(model: model, binding: $0, icon: $1, removable: true)) }
+                    )).disabled(model.storageBlocked)
+                    .tabItem { Label(plugin.settingsTitle, systemImage: plugin.settingsSymbol) }
+                }
                 plugins.tabItem { Label("插件", systemImage: "puzzlepiece.extension") }
                 general.tabItem { Label("通用", systemImage: "gearshape") }
             }.padding([.horizontal, .bottom], 18)
@@ -31,23 +40,6 @@ struct SettingsView: View {
             Button("好", role: .cancel) { model.message = nil }
         } message: { Text(model.message ?? "") }
     }
-    private var applications: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("按键打开或显示应用，已在前台时再次按下可隐藏。").foregroundStyle(.secondary)
-                Spacer()
-                Button { model.addApplication() } label: { Label("添加应用", systemImage: "plus") }
-                    .disabled(model.storageBlocked)
-            }.padding(.top, 14)
-            if !model.configuration.appPluginEnabled {
-                Text("应用快捷切换插件已停用，可在「插件」中启用。").foregroundStyle(.orange)
-            }
-            let bindings = model.configuration.bindings.filter { $0.pluginID == AppSwitchPlugin.id }
-            if bindings.isEmpty { empty("添加第一个应用", detail: "选择常用应用，再录入 ⌘⌥ 加字母或数字。", icon: "app.dashed") }
-            else { bindingList(bindings) }
-            Text("默认前缀 ⌘⌥ · 支持自定义组合 · Esc 取消录入").font(.caption).foregroundStyle(.secondary)
-        }.padding(12)
-    }
     private var plugins: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -57,14 +49,16 @@ struct SettingsView: View {
             }.padding(.top, 14)
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    ForEach(model.builtins, id: \.pluginID) { plugin in
                     GroupBox {
                         HStack {
-                            Label("应用快捷切换", systemImage: "app.badge").font(.headline)
+                            Label(plugin.displayName, systemImage: plugin.settingsSymbol).font(.headline)
                             Text("内置").font(.caption).foregroundStyle(.secondary)
                             Spacer()
-                            Toggle("启用", isOn: Binding(get: { model.configuration.appPluginEnabled }, set: model.setAppPluginEnabled))
+                            Toggle("启用", isOn: Binding(get: { model.builtinEnabled(plugin.pluginID) }, set: { value in Task { await model.setBuiltinEnabled(plugin.pluginID, value) } }))
                                 .toggleStyle(.switch).fixedSize()
                         }.padding(8)
+                    }
                     }
                     ForEach(model.configuration.plugins) { plugin in
                         GroupBox {
@@ -79,7 +73,7 @@ struct SettingsView: View {
                                 Text(model.pluginStatus[plugin.id] ?? (plugin.enabled ? "等待启动" : "已停用"))
                                     .font(.caption).foregroundStyle(.secondary).lineLimit(1).frame(height: 18)
                                 ForEach(model.configuration.bindings.filter { $0.pluginID == plugin.id }) { binding in
-                                    BindingRow(model: model, binding: binding, application: false)
+                                    BindingRow(model: model, binding: binding, icon: nil, removable: false)
                                 }
                             }.padding(8)
                         }
@@ -113,21 +107,10 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 if model.storageBlocked { Text("配置读取失败。请恢复备份或检查原文件；当前不会覆盖原配置。").foregroundStyle(.red) }
             }
-            Section("窗口与桌面") {
-                Text("应用未启动时启动；前台再次触发时隐藏。多个窗口、最小化和其他桌面的恢复遵循系统与目标应用的行为。")
+            Section("权限") {
                 Text("此版本不申请辅助功能、输入监控或屏幕录制权限。").font(.caption).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped)
-    }
-    private func bindingList(_ bindings: [CommandBinding]) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(bindings) { binding in
-                    BindingRow(model: model, binding: binding, application: true)
-                    Divider()
-                }
-            }
-        }.background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
     }
     private func empty(_ title: String, detail: String, icon: String) -> some View {
         VStack(spacing: 10) {
@@ -141,11 +124,12 @@ struct SettingsView: View {
 private struct BindingRow: View {
     @ObservedObject var model: AppModel
     let binding: CommandBinding
-    let application: Bool
+    let icon: NSImage?
+    let removable: Bool
     var body: some View {
         HStack(spacing: 12) {
-            if application, let path = binding.configuration["path"] {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: path)).resizable().frame(width: 32, height: 32)
+            if let icon {
+                Image(nsImage: icon).resizable().frame(width: 32, height: 32)
             }
             VStack(alignment: .leading, spacing: 5) {
                 Text(binding.title).font(.headline).lineLimit(1)
@@ -161,9 +145,9 @@ private struct BindingRow: View {
                 .buttonStyle(.borderless).help("试运行命令").disabled(!binding.enabled)
             Toggle("启用", isOn: Binding(get: { binding.enabled }, set: { model.setBindingEnabled(binding.id, $0) }))
                 .labelsHidden().toggleStyle(.switch).fixedSize()
-            if application {
+            if removable {
                 Button { model.removeBinding(binding.id) } label: { Image(systemName: "minus.circle") }
-                    .buttonStyle(.borderless).help("移除应用")
+                    .buttonStyle(.borderless).help("移除绑定")
             }
         }.padding(.horizontal, 12).frame(height: 76).disabled(model.storageBlocked)
     }

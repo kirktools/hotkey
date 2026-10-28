@@ -16,7 +16,7 @@ final class ConfigurationTests {
         var first = Configuration()
         first.bindings = [.init(pluginID: "builtin.app-switcher", command: "toggle", title: "测试应用")]
         try store.save(first)
-        var second = first; second.appPluginEnabled = false
+        var second = first; second.pluginEnabled["builtin.app-switcher"] = false
         try store.save(second)
         #expect(try store.load() == second)
         try Data("broken".utf8).write(to: store.file)
@@ -29,6 +29,22 @@ final class ConfigurationTests {
             .filter { $0.lastPathComponent.hasPrefix("configuration-before-restore-") }
         #expect(preserved.count == 1)
         #expect(try String(contentsOf: preserved[0], encoding: .utf8) == "broken")
+    }
+    @Test func testLegacyPluginStateMigratesWithoutLosingBindings() throws {
+        let data = Data(#"{"schemaVersion":1,"appPluginEnabled":false,"bindings":[],"plugins":[]}"#.utf8)
+        let config = try ConfigurationStore(root: root).decode(data)
+        #expect(config.schemaVersion == 2)
+        var binding = CommandBinding(pluginID: "builtin.app-switcher", command: "toggle", title: "测试")
+        binding.configuration = ["bundleID": "example.app", "path": "/Applications/Example.app"]
+        binding.shortcut = .init(keyCode: 0, modifiers: (1 << 19) | (1 << 20), label: "A")
+        var object = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        object["bindings"] = [try JSONSerialization.jsonObject(with: JSONEncoder().encode(binding))]
+        let migrated = try ConfigurationStore(root: root).decode(JSONSerialization.data(withJSONObject: object))
+        #expect(migrated.bindings == [binding])
+        #expect(config.pluginEnabled["builtin.app-switcher"] == false)
+        let encoded = try JSONEncoder().encode(config)
+        #expect(!String(decoding: encoded, as: UTF8.self).contains("appPluginEnabled"))
+        #expect(try JSONDecoder().decode(Configuration.self, from: encoded) == config)
     }
     @Test func testDuplicateAndInvalidConfigurationsAreRejected() throws {
         var config = Configuration()

@@ -1,33 +1,5 @@
 import Foundation
-import PluginSDK
-
-public struct Shortcut: Codable, Equatable, Hashable {
-    public var keyCode: UInt32
-    // NSEvent 的原始修饰键位；只存 command、option、control、shift。
-    public var modifiers: UInt
-    public var label: String
-    public init(keyCode: UInt32, modifiers: UInt, label: String) {
-        self.keyCode = keyCode; self.modifiers = modifiers; self.label = label
-    }
-    public static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.keyCode == rhs.keyCode && lhs.modifiers == rhs.modifiers
-    }
-    public func hash(into hasher: inout Hasher) { hasher.combine(keyCode); hasher.combine(modifiers) }
-}
-
-public struct CommandBinding: Codable, Identifiable, Equatable {
-    public var id: UUID
-    public var pluginID: String
-    public var command: String
-    public var title: String
-    public var configuration: [String: String]
-    public var shortcut: Shortcut?
-    public var enabled: Bool
-    public init(pluginID: String, command: String, title: String, configuration: [String: String] = [:]) {
-        id = UUID(); self.pluginID = pluginID; self.command = command; self.title = title
-        self.configuration = configuration; enabled = true
-    }
-}
+@_exported import PluginSDK
 
 public struct InstalledPlugin: Codable, Identifiable, Equatable {
     public var id: String
@@ -39,14 +11,35 @@ public struct InstalledPlugin: Codable, Identifiable, Equatable {
 }
 
 public struct Configuration: Codable, Equatable {
-    public var schemaVersion = 1
-    public var appPluginEnabled = true
+    public var schemaVersion = 2
+    public var pluginEnabled: [String: Bool] = [:]
     public var bindings: [CommandBinding] = []
     public var plugins: [InstalledPlugin] = []
     public init() {}
 
+    private enum CodingKeys: String, CodingKey { case schemaVersion, pluginEnabled, bindings, plugins, appPluginEnabled }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let version = try values.decode(Int.self, forKey: .schemaVersion)
+        guard version == 1 || version == 2 else { throw PluginError.message("配置版本不受支持。") }
+        schemaVersion = 2
+        pluginEnabled = try values.decodeIfPresent([String: Bool].self, forKey: .pluginEnabled) ?? [:]
+        if version == 1 {
+            // 仅在迁移旧格式时识别历史功能字段，新配置不再写入它。
+            pluginEnabled["builtin.app-switcher"] = try values.decodeIfPresent(Bool.self, forKey: .appPluginEnabled) ?? true
+        }
+        bindings = try values.decode([CommandBinding].self, forKey: .bindings)
+        plugins = try values.decode([InstalledPlugin].self, forKey: .plugins)
+    }
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(schemaVersion, forKey: .schemaVersion)
+        try values.encode(pluginEnabled, forKey: .pluginEnabled)
+        try values.encode(bindings, forKey: .bindings)
+        try values.encode(plugins, forKey: .plugins)
+    }
     public func validate() throws {
-        guard schemaVersion == 1 else { throw PluginError.message("配置版本不受支持，请使用匹配的应用版本。") }
+        guard schemaVersion == 2 else { throw PluginError.message("配置版本不受支持，请使用匹配的应用版本。") }
         guard Set(bindings.map(\.id)).count == bindings.count,
               Set(plugins.map(\.id)).count == plugins.count else {
             throw PluginError.message("配置中存在重复标识。")

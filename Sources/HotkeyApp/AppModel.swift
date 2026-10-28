@@ -1,7 +1,6 @@
 import AppKit
 import Combine
 import HotkeyCore
-import AppSwitchPlugin
 import PluginSDK
 
 @MainActor final class AppModel: ObservableObject {
@@ -15,14 +14,15 @@ import PluginSDK
     @Published private(set) var storageBlocked = false
     let store: ConfigurationStore
     private let registrar = HotkeyRegistrar()
-    private let appPlugin = AppSwitchPlugin()
+    let builtins: [any BuiltinPlugin]
     private let dispatcher = CommandDispatcher()
     private var external: [String: ExternalPlugin] = [:]
     private var inFlight = Set<UUID>()
     private var shuttingDown = false
     var applicationName: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Hotkey" }
 
-    init() {
+    init(builtins: [any BuiltinPlugin]) {
+        self.builtins = builtins
         var root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(Bundle.main.object(forInfoDictionaryKey: "HotkeyDataDirectoryName") as? String ?? "Hotkey", isDirectory: true)
         #if DEBUG
@@ -34,18 +34,24 @@ import PluginSDK
         do { configuration = try store.load() }
         catch { storageBlocked = true; message = "配置读取失败，原文件已保留。请恢复备份，或打开配置目录检查：\(error.localizedDescription)" }
         registrar.onTrigger = { [weak self] id in self?.invoke(id) }
-        dispatcher.register(appPlugin)
     }
     var issueCount: Int { bindingErrors.count + pluginStatus.values.filter { $0 != "已就绪" && $0 != "已停用" }.count + (storageBlocked ? 1 : 0) }
     func start() async {
         guard !storageBlocked else { return }
         busy = true
+        for plugin in builtins where builtinEnabled(plugin.pluginID) {
+            do {
+                try await plugin.enable()
+                dispatcher.register(plugin)
+                pluginStatus[plugin.pluginID] = "已就绪"
+            } catch { pluginStatus[plugin.pluginID] = error.localizedDescription }
+        }
         for item in configuration.plugins where item.enabled { await loadPlugin(item) }
         busy = false
         syncShortcuts()
     }
     private func available(_ pluginID: String) -> Bool {
-        if pluginID == AppSwitchPlugin.id { return configuration.appPluginEnabled }
+        if builtins.contains(where: { $0.pluginID == pluginID }) { return builtinEnabled(pluginID) && pluginStatus[pluginID] == "已就绪" }
         return external[pluginID]?.ready == true && configuration.plugins.first(where: { $0.id == pluginID })?.enabled == true
     }
     private func persist(_ next: Configuration) throws {
@@ -65,20 +71,12 @@ import PluginSDK
     func togglePause() { paused.toggle(); syncShortcuts() }
     func retryShortcuts() { syncShortcuts() }
 
-    func addApplication() {
-        let picker = NSOpenPanel(); picker.title = "选择要绑定的应用"; picker.allowedContentTypes = [.applicationBundle]
-        picker.directoryURL = URL(fileURLWithPath: "/Applications"); picker.allowsMultipleSelection = false
-        guard picker.runModal() == .OK, let url = picker.url, let bundle = Bundle(url: url),
-              let id = bundle.bundleIdentifier else { return }
-        guard id != Bundle.main.bundleIdentifier else { message = "请通过菜单栏打开 Hotkey 设置。"; return }
-        guard !configuration.bindings.contains(where: { $0.pluginID == AppSwitchPlugin.id && $0.configuration["bundleID"] == id }) else {
-            message = "此应用已经添加。"; return
+    func addBinding(_ binding: CommandBinding, pluginID: String) throws {
+        guard binding.pluginID == pluginID, builtins.contains(where: { $0.pluginID == pluginID }) else {
+            throw PluginError.message("绑定不属于已注册插件。")
         }
-        let name = FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
-        var next = configuration
-        next.bindings.append(.init(pluginID: AppSwitchPlugin.id, command: "toggle", title: name,
-                                   configuration: ["bundleID": id, "path": url.path, "name": name]))
-        do { try persist(next) } catch { message = error.localizedDescription }
+        var next = configuration; next.bindings.append(binding)
+        try persist(next); syncShortcuts()
     }
     func updateShortcut(_ id: UUID, _ key: Shortcut?) {
         guard let index = configuration.bindings.firstIndex(where: { $0.id == id }) else { return }
@@ -122,9 +120,18 @@ import PluginSDK
             } catch { bindingErrors[id] = error.localizedDescription }
         }
     }
-    func setAppPluginEnabled(_ enabled: Bool) {
-        var next = configuration; next.appPluginEnabled = enabled
-        do { try persist(next); syncShortcuts() } catch { message = error.localizedDescription }
+    func builtinEnabled(_ id: String) -> Bool { configuration.pluginEnabled[id] ?? true }
+    func setBuiltinEnabled(_ id: String, _ enabled: Bool) async {
+        guard !busy, let plugin = builtins.first(where: { $0.pluginID == id }) else { return }
+        busy = true; defer { busy = false; syncShortcuts() }
+        var next = configuration; next.pluginEnabled[id] = enabled
+        do { try persist(next) } catch { message = error.localizedDescription; return }
+        dispatcher.unregister(id); pluginStatus[id] = "已停用"; syncShortcuts()
+        await plugin.disable()
+        if enabled {
+            do { try await plugin.enable(); dispatcher.register(plugin); pluginStatus[id] = "已就绪" }
+            catch { pluginStatus[id] = error.localizedDescription }
+        }
     }
     private func loadPlugin(_ item: InstalledPlugin) async {
         guard !shuttingDown else { return }
@@ -259,12 +266,13 @@ import PluginSDK
     private func reload() async {
         registrar.removeAll()
         for plugin in external.values { dispatcher.unregister(plugin.pluginID); await plugin.disable() }
+        for plugin in builtins { dispatcher.unregister(plugin.pluginID); await plugin.disable() }
         external.removeAll(); bindingErrors.removeAll(); pluginStatus.removeAll()
         await start()
     }
     func shutdown() async {
         shuttingDown = true; registrar.removeAll()
         for plugin in external.values { dispatcher.unregister(plugin.pluginID); await plugin.disable() }
-        await appPlugin.disable()
+        for plugin in builtins { dispatcher.unregister(plugin.pluginID); await plugin.disable() }
     }
 }
