@@ -29,7 +29,7 @@ import Combine
         statusItem.button?.image = NSImage(systemSymbolName: "command", accessibilityDescription: "Hotkey")
         let mainMenu = NSMenu()
         let appMenuItem = NSMenuItem(); let appMenu = NSMenu()
-        let quitItem = NSMenuItem(title: "退出 Hotkey", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "退出 \(model.applicationName)", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self; appMenu.addItem(quitItem); appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem); NSApp.mainMenu = mainMenu
         signal(SIGTERM, SIG_IGN)
@@ -59,14 +59,14 @@ import Combine
         menu.addItem(settings)
         let pause = NSMenuItem(title: model.paused ? "恢复全部快捷键" : "暂停全部快捷键", action: #selector(togglePause), keyEquivalent: "")
         pause.target = self; menu.addItem(pause); menu.addItem(.separator())
-        let quit = NSMenuItem(title: "退出 Hotkey", action: #selector(quit), keyEquivalent: "q"); quit.target = self; menu.addItem(quit)
+        let quit = NSMenuItem(title: "退出 \(model.applicationName)", action: #selector(quit), keyEquivalent: "q"); quit.target = self; menu.addItem(quit)
         statusItem.menu = menu
-        statusItem.button?.toolTip = "Hotkey · \(summary.title)"
+        statusItem.button?.toolTip = "\(model.applicationName) · \(summary.title)"
     }
     @objc func showSettings() {
         if settingsWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 850, height: 580), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-            window.title = "Hotkey 设置"; window.isReleasedWhenClosed = false
+            window.title = "\(model.applicationName) 设置"; window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: SettingsView(model: model))
             window.setFrameAutosaveName("HotkeySettings"); window.center(); settingsWindow = window
         }

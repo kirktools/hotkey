@@ -1,11 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# 退出旧版本，让其先清理插件进程。只针对本项目使用的应用标识。
+# 只更新本工作区的开发版，保留日常使用的正式版进程。
 python3 - <<'PY'
 import os, signal, subprocess, time
 from pathlib import Path
-executable = str(Path('dist/Hotkey.app/Contents/MacOS/Hotkey').resolve())
+executable = str(Path('dist/dev/Hotkey Dev.app/Contents/MacOS/Hotkey').resolve())
 rows = subprocess.check_output(['ps', '-axo', 'pid=,comm='], text=True).splitlines()
 for row in rows:
     fields = row.strip().split(None, 1)
@@ -23,4 +23,4 @@ for row in rows:
         raise SystemExit('旧版本尚未退出，请在菜单栏退出后重试。')
 PY
 ./scripts/build.sh
-open dist/Hotkey.app --args --settings
+open "dist/dev/Hotkey Dev.app" --args --settings

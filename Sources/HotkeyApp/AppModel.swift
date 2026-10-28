@@ -20,10 +20,11 @@ import PluginSDK
     private var external: [String: ExternalPlugin] = [:]
     private var inFlight = Set<UUID>()
     private var shuttingDown = false
+    var applicationName: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Hotkey" }
 
     init() {
         var root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Hotkey", isDirectory: true)
+            .appendingPathComponent(Bundle.main.object(forInfoDictionaryKey: "HotkeyDataDirectoryName") as? String ?? "Hotkey", isDirectory: true)
         #if DEBUG
         if let override = ProcessInfo.processInfo.environment["HOTKEY_DATA_DIRECTORY"] {
             root = URL(fileURLWithPath: override, isDirectory: true)

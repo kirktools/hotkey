@@ -9,7 +9,7 @@ struct SettingsView: View {
             HStack {
                 Image(systemName: "command.square.fill").font(.largeTitle).foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Hotkey").font(.title2.bold())
+                    Text(model.applicationName).font(.title2.bold())
                     Text("让常用操作触手可及").foregroundStyle(.secondary)
                 }
                 Spacer()

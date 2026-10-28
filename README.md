@@ -17,7 +17,7 @@
 ./scripts/run.sh
 ```
 
-此命令退出本项目构建的旧进程、重新构建并打开 `dist/Hotkey.app`。应用常驻菜单栏；首次运行自动打开设置。后续点击菜单栏的 `⌘` 图标进入设置。
+此命令退出本工作区的旧开发版，重新构建并打开 `dist/dev/Hotkey Dev.app`。开发版使用独立配置，不影响日常使用的 Hotkey。应用常驻菜单栏；后续点击菜单栏的 `⌘` 图标进入设置。
 
 1. 在「应用」中添加本机应用。
 2. 点击「录入快捷键」，例如按 `⌘⌥B`。`Esc` 取消。
@@ -29,9 +29,10 @@
 ./scripts/build.sh
 ./scripts/test.sh
 ./scripts/build.sh release
+./scripts/package.sh
 ```
 
-产物采用本地 ad-hoc 签名，供本机试用；未做 Developer ID 签名或公证。安装到其他机器的正式分发流程尚未提供。
+开发版和日常使用版均采用免费的 ad-hoc 签名，并检查签名有效性。`package.sh` 生成带版本、架构和校验清单的本地 ZIP；不提交或发布。未做 Developer ID 签名或公证，下载到其他机器后仍可能遇到系统拦截。参见[签名与更新说明](docs/signing-and-updates.md)。
 
 ## 外部插件
 
@@ -49,4 +50,4 @@
 - 外部插件当前在启用时启动并握手，停用或退出宿主时退出；按需冷启动可后续优化。
 - 菜单扩展、插件自定义设置字段界面、自动更新及登录时启动暂未实现。
 
-配置位于 `~/Library/Application Support/Hotkey/`。导出配置含应用路径；插件包与构建产物不写进共享源码。
+日常配置位于 `~/Library/Application Support/Hotkey/`，开发版使用相邻的 `Hotkey-dev/`。导出配置含应用路径；插件包与构建产物不写进共享源码。
