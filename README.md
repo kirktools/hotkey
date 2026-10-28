@@ -1,5 +1,7 @@
 # Hotkey
 
+[下载最新版本](https://github.com/kirktools/hotkey/releases/latest) · [English](README.en.md) · 简体中文
+
 轻量的原生 macOS 菜单栏快捷键工具。Swift、SwiftUI、AppKit 实现，无第三方运行时依赖，配置只保存在本机。
 
 - 为应用绑定全局快捷键：未运行时启动，后台时显示，前台再次触发时隐藏。
@@ -8,6 +10,8 @@
 - 插件框架与功能分离：应用切换为内置插件，支持安装外部原生插件包。
 - 停用外部插件会撤销快捷键并结束其进程。
 - 支持配置导入、导出及上一份有效配置的恢复。
+
+![Hotkey 合成演示封面，非真实桌面录屏](site/assets/demo-poster.svg)
 
 ## 本地运行
 
@@ -71,3 +75,7 @@ make release BUMP=minor
 ## 许可证
 
 本项目采用 [MIT License](LICENSE)，允许使用、修改和商用，分发时须保留版权与许可声明。
+
+## 官网维护
+
+原生静态页面位于 `site/`。使用 `make site` 构建、`make site-check` 检查、`make site-preview` 在本机预览。官网仅在正式发布成功后从对应标签源码部署；普通推送不部署。Pages 配置、独立重试及验证范围见[官网维护说明](docs/site.md)。

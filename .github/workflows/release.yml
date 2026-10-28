@@ -3,15 +3,17 @@ on:
   push:
     tags: ['v*']
 permissions:
-  contents: write
+  contents: read
 concurrency:
   group: release
   cancel-in-progress: false
 jobs:
   release:
+    permissions:
+      contents: write
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
       - name: Validate version tag
@@ -32,3 +34,13 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/packages/* \
             --repo "$GITHUB_REPOSITORY" --verify-tag \
             --title "Hotkey ${GITHUB_REF_NAME#v}" --generate-notes
+
+  website:
+    needs: release
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
+    with:
+      tag: ${{ github.ref_name }}

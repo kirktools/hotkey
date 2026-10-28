@@ -4,7 +4,7 @@ BUMP ?= patch
 export CONFIG BUMP
 .PHONY: help dev test check build package release-dry-run release
 help:
-	@printf '%s\n' 'make dev | test | check | build [CONFIG=release] | package' 'make release-dry-run [BUMP=patch|minor|major]' 'make release [BUMP=patch|minor|major]'
+	@printf '%s\n' 'make dev | test | check | build [CONFIG=release] | package' 'make release-dry-run [BUMP=patch|minor|major]' 'make release [BUMP=patch|minor|major]' 'make site | site-check | site-preview'
 dev:
 	@./scripts/run.sh
 test:
@@ -19,3 +19,11 @@ release-dry-run:
 	@python3 scripts/release.py --dry-run
 release:
 	@python3 scripts/release.py
+
+.PHONY: site site-check site-preview
+site:
+	@python3 scripts/site.py build
+site-check:
+	@python3 scripts/site.py check
+site-preview:
+	@python3 scripts/site.py preview

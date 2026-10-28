@@ -15,12 +15,16 @@ plugin_archive="NativeMessage-$version-macos-$architecture.zip"
 ditto -c -k --keepParent dist/Hotkey.app "dist/packages/$app_archive"
 ditto -c -k --keepParent dist/NativeMessage.hotkeyplugin "dist/packages/$plugin_archive"
 python3 - "$app_archive" "$plugin_archive" <<'PY'
-import hashlib, json, plistlib, sys
+import hashlib, json, plistlib, sys, shutil, platform
 from pathlib import Path
 output = Path('dist/packages')
 info = plistlib.loads(Path('dist/Hotkey.app/Contents/Info.plist').read_bytes())
 files = []
-for name in sys.argv[1:]:
+# 固定名称与版本名称共用同一份字节，不重新压缩。
+for source, alias in zip(sys.argv[1:], ('Hotkey-macos-'+platform.machine()+'.zip', 'NativeMessage-macos-'+platform.machine()+'.zip')):
+    shutil.copyfile(output / source, output / alias)
+names = list(sys.argv[1:]) + ['Hotkey-macos-'+platform.machine()+'.zip', 'NativeMessage-macos-'+platform.machine()+'.zip']
+for name in names:
     path = output / name
     files.append(dict(name=name, size=path.stat().st_size, sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
 manifest = dict(version=info['CFBundleShortVersionString'], build=info['CFBundleVersion'],
