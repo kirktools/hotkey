@@ -7,9 +7,14 @@ on:
         type: string
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'release：重试正式版本官网；website：仅更新 master 中的官网'
+        type: choice
+        default: release
+        options: [release, website]
       tag:
-        description: '已发布且为最新正式版的标签，例如 v0.1.2'
-        required: true
+        description: '最新正式版标签；留空自动查询（website 模式也使用该版本信息）'
+        required: false
         type: string
 permissions:
   contents: read
@@ -23,33 +28,47 @@ jobs:
       contents: read
     env:
       RELEASE_TAG: ${{ inputs.tag }}
+      DEPLOY_MODE: ${{ inputs.mode || 'release' }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - name: Validate published release and fixed download
+        id: source
         run: |
           python3 - <<'PY'
           import json, os, re, subprocess
-          tag = os.environ['RELEASE_TAG']
+          def api(suffix):
+              return json.loads(subprocess.check_output(['gh','api',f'repos/{os.environ["GITHUB_REPOSITORY"]}/{suffix}']))
+          mode = os.environ['DEPLOY_MODE']
+          if mode not in ('release', 'website'):
+              raise SystemExit('未知部署模式')
+          if mode == 'website' and os.environ['GITHUB_REF'] != 'refs/heads/master':
+              raise SystemExit('仅更新官网必须从 master 运行')
+          latest = api('releases/latest')
+          tag = os.environ['RELEASE_TAG'] or latest['tag_name']
           if not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
               raise SystemExit('需要正式版本标签')
-          def api(suffix):
-              return json.loads(subprocess.check_output(['gh','api',f'repos/{os.environ["GITHUB_REPOSITORY"]}/releases/{suffix}']))
-          release = api('tags/'+tag)
-          if release['draft'] or release['prerelease'] or api('latest')['tag_name'] != tag:
+          release = api('releases/tags/'+tag)
+          if release['draft'] or release['prerelease'] or latest['tag_name'] != tag:
               raise SystemExit('仅部署最新已发布的正式版')
           if 'Hotkey-macos-arm64.zip' not in {a['name'] for a in release['assets']}:
               raise SystemExit('该版本缺少官网所需的固定下载文件')
+          source = api('commits/master' if mode == 'website' else 'commits/'+tag)['sha']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'tag={tag}\nref={source}\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f'官网模式：{mode}\n\n源码：{source}\n\n应用正式版：{tag}\n')
           PY
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ steps.source.outputs.ref }}
           persist-credentials: false
-      - name: Build from release source
+      - name: Build website
         env:
-          SITE_RELEASE_TAG: ${{ inputs.tag }}
+          SITE_RELEASE_TAG: ${{ steps.source.outputs.tag }}
+          SITE_CONTENT_ONLY: ${{ inputs.mode == 'website' && '1' || '0' }}
         run: make site-check
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:

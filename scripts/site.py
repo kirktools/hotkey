@@ -32,7 +32,10 @@ class Document(HTMLParser):
 def build():
     version = plistlib.loads((ROOT/'Resources/Info.plist').read_bytes())['CFBundleShortVersionString']
     tag = os.environ.get('SITE_RELEASE_TAG', '')
-    if tag and (not re.fullmatch(r'v\d+\.\d+\.\d+', tag) or tag != 'v'+version):
+    content_only = os.environ.get('SITE_CONTENT_ONLY', '0') == '1'
+    if content_only and not tag:
+        raise ValueError('仅更新官网时必须提供已发布版本标签')
+    if tag and (not re.fullmatch(r'v\d+\.\d+\.\d+', tag) or (not content_only and tag != 'v'+version)):
         raise ValueError('发布标签必须与源码版本一致')
     if (ROOT/".build").is_symlink() or OUT.is_symlink(): raise ValueError("拒绝通过符号链接写入官网目录")
     OUT.mkdir(parents=True, exist_ok=True)
