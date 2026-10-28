@@ -1,6 +1,6 @@
 # Hotkey
 
-[下载最新版本](https://github.com/kirktools/hotkey/releases/latest) · [English](README.en.md) · 简体中文
+[官网](https://kirktools.github.io/hotkey/) · [下载最新版本](https://github.com/kirktools/hotkey/releases/latest) · [English](README.en.md) · 简体中文
 
 轻量的原生 macOS 菜单栏快捷键工具。Swift、SwiftUI、AppKit 实现，无第三方运行时依赖，配置只保存在本机。
 

@@ -11,14 +11,16 @@ import shutil
 from urllib.parse import urlsplit, unquote
 
 ROOT = Path(__file__).resolve().parent.parent
-FILES = ('index.html', 'assets/style.css', 'assets/demo-poster.svg', 'assets/demo.webm')
+FILES = ('index.html', 'assets/style.css', 'assets/demo-poster.svg', 'assets/demo.webm', 'assets/icon.svg', 'assets/favicon-32.png', 'assets/apple-touch-icon.png', 'assets/social-card.png')
 OUT = ROOT / '.build/site'
 
 class Document(HTMLParser):
     def __init__(self):
-        super().__init__(); self.ids = set(); self.links = []; self.video = []
+        super().__init__(); self.ids = set(); self.links = []; self.video = []; self.metadata = {}; self.icons = {}
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        if tag == 'meta': self.metadata[attrs.get('property', attrs.get('name', ''))] = attrs.get('content', '')
+        if tag == 'link': self.icons[attrs.get('rel')] = attrs.get('href', '')
         if 'id' in attrs:
             if attrs['id'] in self.ids: raise ValueError('重复锚点')
             self.ids.add(attrs['id'])
@@ -74,9 +76,19 @@ def check():
         raise ValueError('缺少语言、移动端或简介元信息')
     expected_download = 'https://github.com/kirktools/hotkey/releases/latest/download/Hotkey-macos-arm64.zip'
     if ('href', expected_download) not in doc.links: raise ValueError('主下载入口未指向固定正式版文件')
+    if doc.icons.get('icon') != 'assets/icon.svg' or doc.icons.get('apple-touch-icon') != 'assets/apple-touch-icon.png' or ('href', 'assets/favicon-32.png') not in doc.links: raise ValueError('缺少浏览器或移动端图标')
+    card = doc.metadata.get('og:image', '')
+    if card != 'https://kirktools.github.io/hotkey/assets/social-card.png' or not (OUT/'assets/social-card.png').is_file():
+        raise ValueError('分享卡片不存在或 URL 不正确')
+    import struct
+    for name, dimensions in [('favicon-32.png', (32,32)), ('apple-touch-icon.png', (180,180)), ('social-card.png', (1200,630))]:
+        data = (OUT/'assets'/name).read_bytes()
+        if data[:8] != b'\x89PNG\r\n\x1a\n' or struct.unpack('>II', data[16:24]) != dimensions:
+            raise ValueError('图标或分享图片尺寸无效：'+name)
+    if doc.metadata.get('twitter:card') != 'summary_large_image': raise ValueError('缺少分享卡片类型')
     if len(doc.video) != 1 or 'controls' not in doc.video[0] or 'autoplay' in doc.video[0] or 'poster' not in doc.video[0]:
         raise ValueError('演示视频需要封面、原生控制且禁止自动播放')
-    print('官网检查通过：资源、锚点、视频控制、封面和发布白名单。')
+    print('官网检查通过：资源、图标、分享卡片、锚点、视频控制和发布白名单。')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(); parser.add_argument('command', choices=['build','check','preview']); args = parser.parse_args()

@@ -12,7 +12,7 @@ make site-preview
 PORT=4174 make site-preview
 ```
 
-仅构建输出到被忽略的 `.build/site/`，预览只绑定 `127.0.0.1`。`scripts/site.py` 只复制常量白名单中的 HTML、CSS、合成封面及视频，再生成 `.nojekyll`、robots.txt 和 sitemap.xml；不上传整个仓库。新增素材须同时更新白名单及检查。拒绝源文件路径逃逸和输出目录符号链接。
+仅构建输出到被忽略的 `.build/site/`，预览只绑定 `127.0.0.1`。`scripts/site.py` 只复制常量白名单中的 HTML、CSS、合成封面、视频及品牌图标，再生成 `.nojekyll`、robots.txt 和 sitemap.xml；不上传整个仓库。新增素材须同时更新白名单及检查。拒绝源文件路径逃逸和输出目录符号链接。
 
 `SITE_RELEASE_TAG=vX.Y.Z make site-check` 会校验标签与 `Resources/Info.plist` 版本一致。未指定时明确标注本地预览，文档链接指向 master；部署时必须指定正式标签，文档链接也随标签固定。
 
@@ -28,7 +28,7 @@ PORT=4174 make site-preview
 
 `make package` 保留 `Hotkey-<版本>-macos-arm64.zip`，另复制为固定文件名，字节完全一致。示例插件也提供版本名与固定名。两种名称均列入 manifest.json 和 SHA256SUMS，不把校验和当作发布者签名。当前构建只生成本机架构；官网不宣传 Intel 或 Universal 下载。将来增加架构时同时调整页面入口与部署检查。
 
-当前已发布的 v0.1.1 没有固定名下载和官网源码。需发布包含本次改动的新版本，不能用旧标签直接上线新页面，也不修改旧 Release 附件。应用内自动更新仍未接入。
+早期 v0.1.1 没有固定名下载和官网源码；v0.1.2 已包含这些内容。后续页面改动仍须从包含改动的新版本标签部署，不修改旧 Release 附件。应用内自动更新仍未接入。
 
 ## GitHub Pages 配置与发布
 
@@ -57,6 +57,20 @@ gh workflow run pages.yml --ref master -f tag=vX.Y.Z
 
 已本地检查白名单、资源、锚点、封面、视频控制和版本替换；浏览器实际验证 1440px 桌面与 390px 手机布局无横向溢出，键盘 Tab 可访问跳转链接，视频可播放与暂停且解码尺寸为 1280×720。已核对 GitHub About、Topics、Pages 来源与环境规则，并验证版本名／固定名包的字节及校验和一致。
 
-尚未执行线上 Pages 部署、标签工作流或真实浏览器下载最新别名；当前正式版尚不含该附件。Safari 等其他浏览器未实测。本地服务默认 4173，本次检查使用 4174，避免影响 Screenshot 的预览服务。
+v0.1.2 发布工作流已成功，官网可访问且固定名附件存在；未在浏览器下载并安装该附件。Safari 等其他浏览器未实测。本地服务默认 4173，本次检查使用 4174，避免影响 Screenshot 的预览服务。
 
-上线还需维护者提交推送本次改动，再正常发布一个新版本。官网将跟随该 Release 从标签源码部署。部署通过后确认页面及主下载链接，再填写 About Website。
+官网初版已随 v0.1.2 上线，About Website 已在确认可访问后填写。后续改动仍需提交推送并随新正式版本部署。
+
+## 品牌图标与分享预览
+
+`site/assets/icon.svg` 与 32px PNG 用于浏览器标签，180px PNG 用于移动端收藏，1200×630 PNG 用于 Open Graph／Twitter 分享卡片。图标和图片均在本机用公开品牌文字绘制，无第三方素材或外部字体依赖；已纳入构建白名单和尺寸检查。
+
+需要重新生成 PNG 时，在 macOS 上执行：
+
+```sh
+xcrun swiftc scripts/generate-site-art.swift -o .build/tools/generate-site-art
+.build/tools/generate-site-art site/assets
+make site-check
+```
+
+Linux Pages 构建只复制已提交的图片，不依赖 AppKit。资源、元信息修复仍随下一次正式版本部署，重跑旧标签不会包含后续改动。此次已回查 v0.1.2 官网可访问、Release 工作流成功，新增图标仍仅在本地验证，尚未发布。未验证各社交平台实际抓取与缓存刷新。
