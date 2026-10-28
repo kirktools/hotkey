@@ -17,22 +17,24 @@
 </head>
 <body>
 <a class="skip" href="#main">跳至正文</a>
-<header class="wrap"><a class="brand" href="#main"><span class="mark" aria-hidden="true">⌘</span> Hotkey</a><nav aria-label="主导航"><a href="#features">功能</a><a href="#start">开始使用</a><a href="https://github.com/kirktools/hotkey">GitHub ↗</a></nav></header>
+<header class="wrap"><a class="brand" href="#main"><img class="mark" src="assets/icon.svg" width="38" height="38" alt=""> Hotkey</a><nav aria-label="主导航"><a href="#features">功能</a><a href="#start">开始使用</a><a href="https://github.com/kirktools/hotkey">GitHub ↗</a></nav></header>
 <main id="main">
-<section class="hero wrap">
+<div class="hero wrap">
+<section class="hero-copy" aria-label="产品介绍">
 <div class="eyebrow">为 macOS 而造 · 开源 · 本机配置</div>
 <h1>常用应用，<br><span>一键到达。</span></h1>
-<p class="lead">少一次寻找，多一点专注。为常用应用绑定全局快捷键：<br class="desktop">打开、切到前台，再按一次隐藏。Hotkey 安静地待在菜单栏。</p>
+<p class="lead">少一次寻找，多一点专注。为常用应用绑定全局快捷键：打开、切到前台，再按一次隐藏。Hotkey 安静地待在菜单栏。</p>
 <div class="actions"><a class="button" href="https://github.com/kirktools/hotkey/releases/latest/download/Hotkey-macos-arm64.zip">下载 macOS 版 <span aria-hidden="true">↓</span></a><a class="secondary" href="https://github.com/kirktools/hotkey/releases">更新日志 / 其他下载 ↗</a></div>
 <p class="caption">macOS 14+ · Apple Silicon（arm64）· 免费 ad-hoc 签名，未公证</p>
 <p class="version">页面对应版本：<strong>@@VERSION@@</strong></p>
 <div class="keyboard" aria-label="建议快捷键前缀 Command 加 Option，加一个自选按键"><kbd>⌘</kbd><kbd>⌥</kbd><span>+</span><kbd class="letter">B</kbd><span class="key-note">你的应用，你的按键。</span></div>
 </section>
-<section id="demo" class="demo wrap" aria-labelledby="demo-title">
+<section id="demo" class="demo" aria-labelledby="demo-title">
 <div class="section-heading"><div><p class="eyebrow">少一步，就顺手一点</p><h2 id="demo-title">从快捷键，到应用。</h2></div><span class="pill">合成数据 · 脚本演示</span></div>
 <video width="1280" height="720" controls playsinline preload="metadata" poster="assets/demo-poster.svg" aria-label="合成演示：绑定快捷键后显示、隐藏示例应用" aria-describedby="demo-note"><source src="assets/demo.webm" type="video/webm"><p>浏览器不支持视频时，可<a href="assets/demo.webm">下载合成演示视频</a>，并查看下方文字说明。</p></video>
 <p id="demo-note" class="caption">演示由脚本绘制，使用虚构应用与绑定，非真实桌面录屏。选择应用 → 录入组合键 → 按键显示 → 再次按键隐藏。可播放、暂停，不自动播放。</p>
 </section>
+</div>
 <section id="features" class="wrap features"><div class="section-heading"><div><p class="eyebrow">够轻，也留有余地</p><h2>把高频操作，留给肌肉记忆。</h2></div></div>
 <div class="feature-grid"><article><span class="number">01 / 快捷切换</span><h3>按键到达，再按收起</h3><p>应用未运行时启动；后台时显示；已在前台时隐藏。建议使用 ⌘⌥ 前缀，也支持自定义组合。</p></article><article><span class="number">02 / 原生与本机</span><h3>不必打开另一个工作台</h3><p>Swift、SwiftUI 与 AppKit 构建，常驻菜单栏。配置只存本机，无账号、无统计、无追踪。</p></article><article><span class="number">03 / 清楚的反馈</span><h3>让绑定有迹可查</h3><p>录入时提示内部重复、系统组合及注册冲突。支持暂停快捷键，以及配置导入、导出和备份恢复。</p></article></div>
 <div class="extension"><strong>功能可以扩展，复杂度不必常驻。</strong><p>应用切换是内置插件，也可添加外部原生插件。外部插件目前为实验功能，仅建议试用可信来源；截图功能尚未接入。</p></div>
