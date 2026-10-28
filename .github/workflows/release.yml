@@ -1,0 +1,34 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate version tag
+        run: |
+          python3 - <<'PY'
+          import os, plistlib
+          from pathlib import Path
+          info = plistlib.loads(Path('Resources/Info.plist').read_bytes())
+          if os.environ['GITHUB_REF_NAME'] != 'v' + info['CFBundleShortVersionString']:
+              raise SystemExit('标签与应用版本不一致')
+          PY
+      - name: Check, test and package
+        run: make check test package
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/packages/* \
+            --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "Hotkey ${GITHUB_REF_NAME#v}" --generate-notes

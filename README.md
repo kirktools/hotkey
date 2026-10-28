@@ -14,7 +14,7 @@
 需要 macOS 14 或更新系统，以及带 Swift 6 的 Xcode 或 Command Line Tools。
 
 ```sh
-./scripts/run.sh
+make dev
 ```
 
 此命令退出本工作区的旧开发版，重新构建并打开 `dist/dev/Hotkey Dev.app`。开发版使用独立配置，不影响日常使用的 Hotkey。应用常驻菜单栏；后续点击菜单栏的 `⌘` 图标进入设置。
@@ -26,13 +26,14 @@
 仅构建、测试或生成 Release 产物：
 
 ```sh
-./scripts/build.sh
-./scripts/test.sh
-./scripts/build.sh release
-./scripts/package.sh
+make test
+make check
+make build
+make build CONFIG=release
+make package
 ```
 
-开发版和日常使用版均采用免费的 ad-hoc 签名，并检查签名有效性。`package.sh` 生成带版本、架构和校验清单的本地 ZIP；不提交或发布。未做 Developer ID 签名或公证，下载到其他机器后仍可能遇到系统拦截。参见[签名与更新说明](docs/signing-and-updates.md)。
+开发版和日常使用版均采用免费的 ad-hoc 签名，并检查签名有效性。`make package` 生成带版本、架构和校验清单的本地 ZIP；不提交或发布。未做 Developer ID 签名或公证，下载到其他机器后仍可能遇到系统拦截。参见[签名与更新说明](docs/signing-and-updates.md)。
 
 ## 外部插件
 
@@ -51,3 +52,16 @@
 - 菜单扩展、插件自定义设置字段界面、自动更新及登录时启动暂未实现。
 
 日常配置位于 `~/Library/Application Support/Hotkey/`，开发版使用相邻的 `Hotkey-dev/`。导出配置含应用路径；插件包与构建产物不写进共享源码。
+
+## 发布
+
+```sh
+make release-dry-run BUMP=minor
+make release BUMP=minor
+```
+
+`BUMP` 支持 `patch`（默认）、`minor`、`major`；`CONFIG` 支持 `debug`（默认）、`release`。参数采用标准 Make 变量语法。
+
+`release-dry-run` 只检查本地条件并预览版本，不联网或写入。`release` 要求干净的 `master` 与远端同步，检查、测试通过后递增版本和构建号、提交版本、创建标签并原子推送。标签触发 Actions 自动构建和发布，无需再次确认；本地只需要 Git 认证，不要求 gh 登录。普通代码推送只运行 CI。
+
+推送失败时保留本地版本提交及标签，不自动回滚历史；修复问题后可以推送已有标签。签名身份配置和免费分发限制见[签名与更新说明](docs/signing-and-updates.md)。

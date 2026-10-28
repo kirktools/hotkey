@@ -19,9 +19,9 @@
 ## 本地开发与日常更新
 
 ```sh
-./scripts/run.sh              # 退出本工作区旧开发版，构建并打开新开发版
-./scripts/build.sh release    # 只构建日常使用版，不启动或覆盖已安装应用
-./scripts/package.sh          # 构建 Release，再生成本地 ZIP 和清单
+make dev              # 退出本工作区旧开发版，构建并打开新开发版
+make build CONFIG=release    # 只构建日常使用版，不启动或覆盖已安装应用
+make package          # 构建 Release，再生成本地 ZIP 和清单
 ```
 
 `scripts/sign.sh` 固定从 Info.plist 取得 Bundle ID，采用 `codesign --sign - --timestamp=none`，签名后立即执行 `codesign --verify --strict`。宿主和独立插件应用分别签名，不使用 `--deep` 递归签名，也不为加载外部插件关闭 library validation。
@@ -39,7 +39,7 @@ ad-hoc 签名可以检查签名后内容是否发生变化，不能证明作者�
 - `manifest.json`：应用版本、构建号、Bundle ID、签名方式、文件大小与 SHA-256。
 - `SHA256SUMS`：可执行 `shasum -a 256 -c SHA256SUMS` 检查文件完整性。
 
-目前只打包本机架构，文件名明确标注；未声称生成 Universal 应用。版本来自 `Resources/Info.plist`，打包命令不自动改版本，也不修改 Git。CI 运行测试、生成 ZIP 并保存 Actions 构建产物，不创建 GitHub Release。
+目前只打包本机架构，文件名明确标注；未声称生成 Universal 应用。版本来自 `Resources/Info.plist`，打包命令不自动改版本，也不修改 Git。CI 运行测试、生成 ZIP 并保存 Actions 构建产物，普通推送不创建 GitHub Release；版本标签触发独立发布工作流。
 
 SHA-256 用于检测损坏和核对文件，不是发布者签名。如果更新包和校验文件同时被替换，单靠它不能验证来源。
 
@@ -53,4 +53,12 @@ SHA-256 用于检测损坏和核对文件，不是发布者签名。如果更新
 
 暂未接入网络更新检查或安装器。真正实现时，优先评估 [Sparkle](https://sparkle-project.org/documentation/) 等成熟原生组件，并使用独立的 Ed25519 更新包签名：公钥随应用分发，私钥由发布者保管。此签名不要求购买 Apple 证书，但不能替代 Gatekeeper 信任或公证。
 
-首次生成密钥、保存位置、备份与恢复需要在接入自动更新时明确决定。当前不生成密钥、不访问钥匙串、不加入自动发布工作流。未来更新流程还需保证：校验先于执行、退出所有受管理插件后替换宿主、更新失败可回退、更新清单最后发布。
+首次生成密钥、保存位置、备份与恢复需要在接入自动更新时明确决定。当前不生成自动更新密钥、不访问钥匙串；标签发布工作流只发布手动安装包。未来更新流程还需保证：校验先于执行、退出所有受管理插件后替换宿主、更新失败可回退、更新清单最后发布。
+
+## 固定开发签名身份
+
+`make dev` 支持 `DEV_SIGNING_IDENTITY` 环境变量，或从被 Git 忽略的 `.local/dev-signing-identity` 读取已有代码签名证书的名称或 SHA-1 标识。文件只存一行身份标识，不存私钥，不作为 Shell 脚本执行。宿主和开发示例插件会使用相同身份。
+
+没有配置时明确输出 ad-hoc 提示；一旦指定身份，签名失败立即停止，不静默回退。当前应用不请求敏感权限，因此默认仍可用 ad-hoc 开发。未来引入需要授权的功能前，应先配置固定开发证书并实测授权连续性。脚本不会自动生成证书、操作钥匙串或重置隐私授权；本次未配置固定证书。
+
+发布入口为 `make release BUMP=patch|minor|major`。版本变更、Git 提交及标签推送只发生在该显式命令中，`make package` 始终只生成本地产物。Actions 使用内置 `GITHUB_TOKEN` 发布，不需要本地 gh 登录或付费 Apple 账号。正式包继续使用 ad-hoc 签名。

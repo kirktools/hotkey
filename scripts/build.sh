@@ -26,8 +26,11 @@ cp Resources/Info.plist "$plugin/ExamplePlugin.app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable ExamplePlugin' "$plugin/ExamplePlugin.app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleName ExamplePlugin' "$plugin/ExamplePlugin.app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName 原生窗口示例' "$plugin/ExamplePlugin.app/Contents/Info.plist"
+if [[ "$configuration" == debug ]]; then
+  /usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier dev.hotkey.example-plugin.dev' "$plugin/ExamplePlugin.app/Contents/Info.plist"
+fi
 cp Examples/manifest.json "$plugin/manifest.json"
-./scripts/sign.sh "$plugin/ExamplePlugin.app"
-./scripts/sign.sh "$app"
+./scripts/sign.sh "$plugin/ExamplePlugin.app" "$configuration"
+./scripts/sign.sh "$app" "$configuration"
 echo "已构建：$app"
 echo "示例插件：$plugin"

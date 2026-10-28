@@ -44,7 +44,9 @@
 - `scripts/package.sh`：生成带版本、架构和 SHA-256 清单的 ZIP，不发布、不修改 Git。
 - `scripts/run.sh`：通过 SIGTERM 让本工作区旧进程清理退出，然后构建并打开新版本；不用 AppleScript 控制其他应用。
 - `scripts/test.sh`：Swift Testing 测试，包括真实子进程测试。
-- CI：运行测试并构建 Release，只提供构建产物，不发布版本。
+- Makefile：提供统一命令入口，委托底层脚本实现。
+- CI：普通推送执行 make check test package；版本标签由独立工作流自动发布。
+- make release-dry-run：只预览并检查本地条件。make release：校验远端、递增版本、提交并原子推送标签。
 - 开发版身份隔离、免费分发边界与后续自动更新：见[签名与更新说明](signing-and-updates.md)。
 
 调试构建支持 `HOTKEY_DATA_DIRECTORY` 指定隔离的测试数据目录；Release 忽略此变量。构建和测试工具的沙箱选项仅影响编译子进程，不修改 macOS 安全设置或应用隐私权限。
