@@ -39,6 +39,11 @@ if [[ "$configuration" == debug ]]; then
   /usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier dev.hotkey.example-plugin.dev' "$plugin/ExamplePlugin.app/Contents/Info.plist"
 fi
 cp Examples/manifest.json "$plugin/manifest.json"
+# 许可文件在签名前加入，随应用与独立示例插件一起分发。
+mkdir -p "$plugin/ExamplePlugin.app/Contents/Resources"
+cp LICENSE "$app/Contents/Resources/LICENSE"
+cp LICENSE "$plugin/LICENSE"
+cp LICENSE "$plugin/ExamplePlugin.app/Contents/Resources/LICENSE"
 ./scripts/sign.sh "$plugin/ExamplePlugin.app" "$configuration"
 ./scripts/sign.sh "$app" "$configuration"
 echo "已构建：$app"
