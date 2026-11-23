@@ -1,0 +1,8 @@
+{
+  "id": "dev.hotkey.translation",
+  "name": "划词翻译",
+  "version": "0.2.1",
+  "protocolVersion": 1,
+  "executable": "TranslationPlugin.app/Contents/MacOS/TranslationPlugin",
+  "commands": [{ "id": "translate-selection", "title": "划词翻译为简体中文" }]
+}

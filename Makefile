@@ -2,9 +2,9 @@
 CONFIG ?= debug
 BUMP ?= patch
 export CONFIG BUMP
-.PHONY: help dev test check build package release-dry-run release
+.PHONY: help dev test check build package release-dry-run release translation-plugin
 help:
-	@printf '%s\n' 'make dev | test | check | build [CONFIG=release] | package' 'make release-dry-run [BUMP=patch|minor|major]' 'make release [BUMP=patch|minor|major]' 'make site | site-check | site-preview'
+	@printf '%s\n' 'make dev | test | check | build [CONFIG=release] | package' 'make release-dry-run [BUMP=patch|minor|major]' 'make release [BUMP=patch|minor|major]' 'make translation-plugin [CONFIG=release]' 'make site | site-check | site-preview'
 dev:
 	@./scripts/run.sh
 test:
@@ -13,6 +13,8 @@ check:
 	@./scripts/check.sh
 build:
 	@./scripts/build.sh "$(CONFIG)"
+translation-plugin:
+	@./scripts/build-translation-plugin.sh "$(CONFIG)"
 package:
 	@./scripts/package.sh
 release-dry-run:

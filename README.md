@@ -47,6 +47,12 @@ make package
 
 外部插件可独立构建和更新，无需重编 Hotkey，也无需另行安装一个顶层应用。只运行可信来源的插件。
 
+划词翻译是可单独安装的插件，需要 macOS 15 或更新版本。运行 `make translation-plugin`，在 Hotkey Dev 的「设置 → 插件」中添加 `dist/dev/Translation.hotkeyplugin`，为「划词翻译为简体中文」绑定快捷键，例如 `⌘⌥T`。日常版插件用 `make translation-plugin CONFIG=release` 构建，包位于 `dist/Translation.hotkeyplugin`。
+
+选中其他应用的文字后按快捷键，译文会出现在浮窗中。划词需要手动授予 macOS 辅助功能权限。应用没有直接提供选区时，插件会尝试调用其菜单中的「复制」，并恢复原剪贴板；系统可能提示允许访问剪贴板。仍读不到时，可把原文粘贴到浮窗中翻译。首次使用 Apple Translation 时，系统可能提示下载语言模型。
+
+浮窗中的「AI 翻译」支持独立授权 ChatGPT 套餐或配置 OpenAI 兼容 API。快捷键仍使用本机翻译。只有主动点击「AI 翻译」才会向界面显示的服务发送原文。自带 API 密钥保存在 macOS 钥匙串，Hotkey 与 Screenshot 分别配置。
+
 参见 [插件开发](docs/plugins.md) 与 [架构及行为边界](docs/architecture.md)。
 
 ## 当前边界
