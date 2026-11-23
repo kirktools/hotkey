@@ -1,5 +1,6 @@
 import AppKit
 import KirkTranslation
+import HotkeyDiagnostics
 import Security
 import SwiftUI
 
@@ -20,7 +21,8 @@ enum AIProvider: String, CaseIterable {
 
     let plan = ChatGPTPlan(
         service: AITranslationSettings.service,
-        applicationName: Bundle.main.bundleIdentifier?.hasSuffix(".dev") == true ? "Hotkey Dev" : "Hotkey"
+        applicationName: Bundle.main.bundleIdentifier?.hasSuffix(".dev") == true ? "Hotkey Dev" : "Hotkey",
+        hostPreferenceKey: AITranslationSettings.service + ".chatgpt.host"
     )
     @Published var provider = AIProvider(rawValue: UserDefaults.standard.string(forKey: "ai.provider") ?? "") ?? .chatGPT {
         didSet { UserDefaults.standard.set(provider.rawValue, forKey: "ai.provider") }
@@ -40,21 +42,29 @@ enum AIProvider: String, CaseIterable {
         }
     }
 
-    func translate(_ text: String) async throws -> String {
+    func translate(_ text: String, segmentMarker: String?) async throws -> String {
         switch provider {
         case .chatGPT:
-            return try await plan.translate(text, target: "Simplified Chinese", model: ChatGPTPlan.defaultTranslationModel)
+            return try await plan.translate(text, target: "Simplified Chinese", model: ChatGPTPlan.defaultTranslationModel, segmentMarker: segmentMarker)
         case .apiKey:
             let config = try CloudTranslation(baseURL: baseURL, model: model)
             guard let key = apiKey(for: config.endpoint) else { throw SettingsError.missingKey }
             try Task.checkCancellation()
-            return try await config.translate(text, target: "Simplified Chinese", apiKey: key)
+            return try await config.translate(text, target: "Simplified Chinese", apiKey: key, segmentMarker: segmentMarker)
         }
     }
 
     func signIn() async throws {
         defer { isSignedIn = plan.isSignedIn }
-        try await plan.signIn { NSWorkspace.shared.open($0) }
+        let operation = HotkeyDiagnostics.shared.begin("translation", "authorization")
+        do {
+            try await plan.signIn { NSWorkspace.shared.open($0) }
+            operation.finish()
+        } catch {
+            operation.finish(level: Task.isCancelled ? .info : .error,
+                             errorCode: Task.isCancelled ? "cancelled" : "authorization_failed")
+            throw error
+        }
     }
 
     func signOut() async throws {

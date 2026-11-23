@@ -156,6 +156,7 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 if model.storageBlocked { Text("配置读取失败。请恢复备份或检查原文件；当前不会覆盖原配置。").foregroundStyle(.red) }
             }
+            DiagnosticSettings(model: model.diagnosticSettings)
             Section("权限") {
                 Text("此版本不申请辅助功能、输入监控或屏幕录制权限。").font(.caption).foregroundStyle(.secondary)
             }

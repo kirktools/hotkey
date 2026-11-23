@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import Combine
 import HotkeyCore
+import HotkeyDiagnostics
 
 @main enum HotkeyMain {
     @MainActor static func main() {
@@ -21,7 +22,8 @@ import HotkeyCore
     private var statusItem: NSStatusItem!
     private var settingsWindow: NSWindow?
     private var updateWindow: NSWindow?
-    private lazy var updater = AppUpdateModel(app: model)
+    private var lastUpdateOutcome: UpdateOutcome?
+    private lazy var updater = AppUpdateModel(app: model, lastOutcome: lastUpdateOutcome)
     private var subscription: AnyCancellable?
     private var quitting = false
     private var terminationSignal: DispatchSourceSignal?
@@ -30,6 +32,17 @@ import HotkeyCore
         if peers.contains(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) {
             peers.first(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier })?.activate(options: [])
             NSApp.terminate(nil); return
+        }
+        if Bundle.main.bundleIdentifier == "dev.hotkey.app", let outcome = UpdateOutcome.takeLatest() {
+            lastUpdateOutcome = outcome
+            let diagnostics = HotkeyDiagnostics.shared
+            switch outcome.status {
+            case .installed: diagnostics.record(.info, module: "updates", event: "install")
+            case .relaunchFailed: diagnostics.record(.warning, module: "updates", event: "install", errorCode: "relaunch_failed")
+            case .validationFailed: diagnostics.record(.error, module: "updates", event: "install", errorCode: "validation_failed")
+            case .quitTimedOut: diagnostics.record(.error, module: "updates", event: "install", errorCode: "quit_timeout")
+            case .replacementFailed: diagnostics.record(.error, module: "updates", event: "install", errorCode: "replacement_failed")
+            }
         }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = NSImage(systemSymbolName: "command", accessibilityDescription: model.applicationName)

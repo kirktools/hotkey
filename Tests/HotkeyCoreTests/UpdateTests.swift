@@ -3,6 +3,22 @@ import Testing
 @testable import HotkeyCore
 
 struct UpdateTests {
+    @Test func updateOutcomeIsReadOnceAndRejectsUnknownStatus() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("hotkey-update-outcome-\(UUID().uuidString)")
+        try fm.createDirectory(at: root, withIntermediateDirectories: false)
+        defer { try? fm.removeItem(at: root) }
+        let file = root.appendingPathComponent("last-result.json")
+        let outcome = UpdateOutcome(status: .relaunchFailed, version: try ReleaseVersion("1.2.3"))
+        try JSONEncoder().encode(outcome).write(to: file)
+        let received = try #require(UpdateOutcome.take(from: file))
+        #expect(received.status == .relaunchFailed)
+        #expect(received.message.contains("1.2.3"))
+        #expect(UpdateOutcome.take(from: file) == nil)
+        try Data(#"{"status":"unknown"}"#.utf8).write(to: file)
+        #expect(UpdateOutcome.take(from: file) == nil)
+    }
+
     @Test func officialReleaseSelectsVersionedArchiveAndRejectsConflictingHashes() throws {
         #if arch(arm64)
         let arch = "arm64"

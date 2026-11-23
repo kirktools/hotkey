@@ -10,16 +10,24 @@ let package = Package(
         .executable(name: "TranslationPlugin", targets: ["TranslationPlugin"]),
         .library(name: "PluginSDK", targets: ["PluginSDK"]),
     ],
-    dependencies: [.package(path: "Vendor/KirkTranslation")],
+    dependencies: [
+        .package(url: "https://github.com/kirktools/pkg-logging.git", exact: "0.1.0"),
+        .package(url: "https://github.com/kirktools/pkg-translation.git", exact: "0.1.0"),
+    ],
     targets: [
         .target(name: "PluginSDK"),
-        .target(name: "HotkeyCore", dependencies: ["PluginSDK"], exclude: ["Updates/LICENSE-Screenshot"]),
-        .target(name: "AppSwitchPlugin", dependencies: ["PluginSDK"]),
-        .executableTarget(name: "HotkeyApp", dependencies: ["HotkeyCore", "AppSwitchPlugin", "PluginSDK"]),
+        .target(name: "HotkeyDiagnostics", dependencies: [.product(name: "KirkLogging", package: "pkg-logging")]),
+        .target(name: "HotkeyCore", dependencies: ["PluginSDK", "HotkeyDiagnostics"], exclude: ["Updates/LICENSE-Screenshot"]),
+        .target(name: "AppSwitchPlugin", dependencies: ["PluginSDK", "HotkeyDiagnostics"]),
+        .executableTarget(name: "HotkeyApp", dependencies: ["HotkeyCore", "AppSwitchPlugin", "PluginSDK", "HotkeyDiagnostics"]),
         .executableTarget(name: "ExamplePlugin", dependencies: ["PluginSDK"]),
-        .executableTarget(name: "TranslationPlugin", dependencies: ["PluginSDK", "KirkTranslation"]),
+        .executableTarget(name: "TranslationPlugin", dependencies: [
+            "PluginSDK", "HotkeyDiagnostics",
+            .product(name: "KirkTranslation", package: "pkg-translation"),
+            .product(name: "KirkTranslationUI", package: "pkg-translation"),
+        ]),
         .executableTarget(name: "ProtocolFixture", dependencies: ["PluginSDK"], path: "Tests/Fixtures/ProtocolFixture"),
-        .testTarget(name: "HotkeyCoreTests", dependencies: ["HotkeyCore", "PluginSDK", "ProtocolFixture"]),
+        .testTarget(name: "HotkeyCoreTests", dependencies: ["HotkeyCore", "HotkeyDiagnostics", "PluginSDK", "ProtocolFixture"]),
     ],
     swiftLanguageModes: [.v5]
 )

@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import HotkeyCore
+import HotkeyDiagnostics
 import PluginSDK
 
 @MainActor final class AppModel: ObservableObject {
@@ -15,6 +16,7 @@ import PluginSDK
     @Published private(set) var officialWorking = false
     @Published private(set) var recording = false
     @Published private(set) var storageBlocked = false
+    let diagnosticSettings = DiagnosticSettingsModel()
     let store: ConfigurationStore
     private let registrar = HotkeyRegistrar()
     private let officialDownloads = UpdateDownload()
@@ -35,8 +37,15 @@ import PluginSDK
         }
         #endif
         store = ConfigurationStore(root: root)
-        do { configuration = try store.load() }
-        catch { storageBlocked = true; message = "配置读取失败，原文件已保留。请恢复备份，或打开配置目录检查：\(error.localizedDescription)" }
+        let load = HotkeyDiagnostics.shared.begin("configuration", "load")
+        do {
+            configuration = try store.load()
+            load.finish()
+        } catch {
+            load.finish(errorCode: "configuration_load_failed")
+            storageBlocked = true
+            message = "配置读取失败，原文件已保留。请恢复备份，或打开配置目录检查：\(error.localizedDescription)"
+        }
         registrar.onTrigger = { [weak self] id in self?.invoke(id) }
     }
     var issueCount: Int { bindingErrors.count + pluginStatus.values.filter { $0 != "已就绪" && $0 != "已停用" }.count + (storageBlocked ? 1 : 0) }
@@ -60,7 +69,15 @@ import PluginSDK
     }
     private func persist(_ next: Configuration) throws {
         guard !storageBlocked else { throw PluginError.message("请先处理配置读取错误。") }
-        try store.save(next); configuration = next
+        let save = HotkeyDiagnostics.shared.begin("configuration", "save")
+        do {
+            try store.save(next)
+            configuration = next
+            save.finish()
+        } catch {
+            save.finish(errorCode: "configuration_save_failed")
+            throw error
+        }
     }
     private func syncShortcuts() {
         guard !paused, !recording, !shuttingDown, !storageBlocked else { registrar.removeAll(); return }
@@ -68,11 +85,19 @@ import PluginSDK
         registrar.retainOnly(Set(active.map(\.id)))
         for binding in active {
             do { try registrar.replace(id: binding.id, shortcut: binding.shortcut); bindingErrors[binding.id] = nil }
-            catch { bindingErrors[binding.id] = error.localizedDescription }
+            catch {
+                bindingErrors[binding.id] = error.localizedDescription
+                HotkeyDiagnostics.shared.record(.warning, module: "shortcuts", event: "registration",
+                                                errorCode: "registration_failed")
+            }
         }
     }
     func setRecording(_ value: Bool) { recording = value; syncShortcuts() }
-    func togglePause() { paused.toggle(); syncShortcuts() }
+    func togglePause() {
+        paused.toggle()
+        HotkeyDiagnostics.shared.record(.info, module: "shortcuts", event: paused ? "pause" : "resume")
+        syncShortcuts()
+    }
     func retryShortcuts() { syncShortcuts() }
 
     func addBinding(_ binding: CommandBinding, pluginID: String) throws {
@@ -86,17 +111,25 @@ import PluginSDK
         guard let index = configuration.bindings.firstIndex(where: { $0.id == id }) else { return }
         let old = configuration.bindings[index]
         if let key, let duplicate = configuration.bindings.first(where: { $0.id != id && $0.shortcut == key }) {
+            HotkeyDiagnostics.shared.record(.warning, module: "shortcuts", event: "registration", errorCode: "duplicate_binding")
             message = "此快捷键已绑定到「\(duplicate.title)」。"; return
         }
         var next = configuration; next.bindings[index].shortcut = key
         do {
             // 先尝试新注册；失败时保留旧绑定。录入结束会重新同步。
             if old.enabled && available(old.pluginID) && !paused {
-                try registrar.replace(id: id, shortcut: key)
+                do { try registrar.replace(id: id, shortcut: key) }
+                catch {
+                    HotkeyDiagnostics.shared.record(.warning, module: "shortcuts", event: "registration", errorCode: "registration_failed")
+                    throw error
+                }
             }
             do { try persist(next) }
             catch {
-                try? registrar.replace(id: id, shortcut: old.shortcut)
+                do { try registrar.replace(id: id, shortcut: old.shortcut) }
+                catch {
+                    HotkeyDiagnostics.shared.record(.error, module: "shortcuts", event: "registration", errorCode: "restore_binding_failed")
+                }
                 throw error
             }
             bindingErrors[id] = nil
@@ -118,10 +151,15 @@ import PluginSDK
         inFlight.insert(id)
         Task {
             defer { inFlight.remove(id) }
+            let operation = HotkeyDiagnostics.shared.begin("shortcuts", "invoke")
             do {
                 try await dispatcher.execute(pluginID: binding.pluginID, command: binding.command, configuration: binding.configuration)
                 bindingErrors[id] = nil
-            } catch { bindingErrors[id] = error.localizedDescription }
+                operation.finish()
+            } catch {
+                bindingErrors[id] = error.localizedDescription
+                operation.finish(errorCode: "command_failed")
+            }
         }
     }
     func builtinEnabled(_ id: String) -> Bool { configuration.pluginEnabled[id] ?? true }
@@ -139,6 +177,7 @@ import PluginSDK
     }
     private func loadPlugin(_ item: InstalledPlugin) async {
         guard !shuttingDown else { return }
+        let operation = HotkeyDiagnostics.shared.begin("plugins", "start")
         do {
             let package = try PluginPackage(root: store.pluginsDirectory.appendingPathComponent(item.directory))
             guard package.manifest.id == item.id else { throw PluginError.message("插件标识与安装记录不一致。") }
@@ -148,10 +187,18 @@ import PluginSDK
             }
             external[item.id] = adapter
             try await adapter.enable()
-            guard !shuttingDown else { await adapter.disable(); return }
+            guard !shuttingDown else {
+                await adapter.disable()
+                operation.finish(level: .info, errorCode: "cancelled")
+                return
+            }
             dispatcher.register(adapter)
             pluginStatus[item.id] = "已就绪"
-        } catch { pluginStatus[item.id] = error.localizedDescription }
+            operation.finish()
+        } catch {
+            pluginStatus[item.id] = error.localizedDescription
+            operation.finish(errorCode: "plugin_start_failed")
+        }
     }
     func setPluginEnabled(_ id: String, _ enabled: Bool) async {
         guard !busy else { return }; busy = true; defer { busy = false }
@@ -191,11 +238,15 @@ import PluginSDK
         officialOffers = []
         officialStatus = "正在检查官方插件…"
         defer { officialWorking = false }
+        let operation = HotkeyDiagnostics.shared.begin("plugins", "catalog")
         do {
             let offers = try await officialDownloads.officialPluginOffers()
             officialOffers = offers
             officialStatus = offers.isEmpty ? "最新正式版暂无适用于当前架构的插件包。" : nil
+            operation.finish()
         } catch {
+            operation.finish(level: Task.isCancelled ? .info : .error,
+                             errorCode: Task.isCancelled ? "cancelled" : "catalog_failed")
             officialStatus = Task.isCancelled ? nil : error.localizedDescription
         }
     }
@@ -205,6 +256,7 @@ import PluginSDK
         officialWorking = true
         officialStatus = "正在下载并校验「\(offer.plugin.name)」…"
         defer { officialWorking = false }
+        let operation = HotkeyDiagnostics.shared.begin("plugins", "download")
         do {
             let prepared = try await officialDownloads.prepareOfficialPlugin(offer)
             defer { prepared.clean() }
@@ -213,7 +265,9 @@ import PluginSDK
             }
             try await install(from: prepared.package.root, expected: prepared.package.manifest)
             officialStatus = "「\(offer.plugin.name)」\(offer.version) 已安装。"
+            operation.finish()
         } catch {
+            operation.finish(errorCode: (error as? UpdateError)?.diagnosticCode ?? "official_install_failed")
             officialStatus = error.localizedDescription
         }
     }
@@ -226,6 +280,7 @@ import PluginSDK
         picker.canChooseFiles = false
         picker.treatsFilePackagesAsDirectories = true
         guard picker.runModal() == .OK, let source = picker.url else { return }
+        var validating = true
         do {
             let package = try PluginPackage(root: source)
             if let id, id != package.manifest.id { throw PluginError.message("选择的插件与要更新的插件标识不同。") }
@@ -245,10 +300,27 @@ import PluginSDK
             }
             confirmation.addButton(withTitle: "取消")
             guard confirmation.runModal() == .alertFirstButtonReturn else { return }
+            validating = false
             try await install(from: source, expected: package.manifest)
-        } catch { message = error.localizedDescription }
+        } catch {
+            if validating {
+                HotkeyDiagnostics.shared.record(.warning, module: "plugins", event: "install", errorCode: "package_rejected")
+            }
+            message = error.localizedDescription
+        }
     }
     private func install(from source: URL, expected: PluginManifest) async throws {
+        let operation = HotkeyDiagnostics.shared.begin("plugins", "install")
+        do {
+            try await replacePlugin(from: source, expected: expected)
+            operation.finish()
+        } catch {
+            operation.finish(errorCode: "plugin_install_failed")
+            throw error
+        }
+    }
+
+    private func replacePlugin(from source: URL, expected: PluginManifest) async throws {
         guard !busy else { return }; busy = true; defer { busy = false; syncShortcuts() }
         let package = try PluginPackage(root: source), fm = FileManager.default
         try fm.createDirectory(at: store.pluginsDirectory, withIntermediateDirectories: true)
@@ -307,7 +379,13 @@ import PluginSDK
         } catch {
             await external[package.manifest.id]?.disable(); external[package.manifest.id] = nil
             if movedPrevious || !hadPrevious { try? fm.removeItem(at: destination) }
-            if movedPrevious { try fm.moveItem(at: previous, to: destination) }
+            if movedPrevious {
+                do { try fm.moveItem(at: previous, to: destination) }
+                catch {
+                    HotkeyDiagnostics.shared.record(.error, module: "plugins", event: "rollback", errorCode: "restore_package_failed")
+                    throw error
+                }
+            }
             if let item = oldConfig.plugins.first(where: { $0.id == package.manifest.id && $0.enabled }) { await loadPlugin(item) }
             throw error
         }
@@ -319,13 +397,24 @@ import PluginSDK
         do { try persist(next) } catch { message = error.localizedDescription; return }
         syncShortcuts(); dispatcher.unregister(id); await external[id]?.disable(); external[id] = nil; pluginStatus[id] = nil
         do { try FileManager.default.removeItem(at: store.pluginsDirectory.appendingPathComponent(id)) }
-        catch { message = "插件已停用，但清理文件失败：\(error.localizedDescription)" }
+        catch {
+            HotkeyDiagnostics.shared.record(.warning, module: "plugins", event: "remove", errorCode: "cleanup_failed")
+            message = "插件已停用，但清理文件失败：\(error.localizedDescription)"
+        }
     }
     func exportConfiguration() {
         let panel = NSSavePanel(); panel.nameFieldStringValue = "hotkey-configuration.json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; try encoder.encode(configuration).write(to: url, options: .atomic) }
-        catch { message = error.localizedDescription }
+        let operation = HotkeyDiagnostics.shared.begin("configuration", "export")
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(configuration).write(to: url, options: .atomic)
+            operation.finish()
+        } catch {
+            operation.finish(errorCode: "export_failed")
+            message = error.localizedDescription
+        }
     }
     func importConfiguration() async {
         let picker = NSOpenPanel(); picker.allowedContentTypes = [.json]
@@ -337,11 +426,23 @@ import PluginSDK
             alert.addButton(withTitle: "替换"); alert.addButton(withTitle: "取消")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
             try persist(next); await reload()
-        } catch { message = error.localizedDescription }
+        } catch {
+            HotkeyDiagnostics.shared.record(.error, module: "configuration", event: "import", errorCode: "import_failed")
+            message = error.localizedDescription
+        }
     }
     func restoreBackup() async {
-        do { configuration = try store.restoreBackup(); storageBlocked = false; await reload(); message = "已恢复备份，恢复前的文件也已保留。" }
-        catch { message = "恢复失败：\(error.localizedDescription)" }
+        let operation = HotkeyDiagnostics.shared.begin("configuration", "restore")
+        do {
+            configuration = try store.restoreBackup()
+            storageBlocked = false
+            await reload()
+            message = "已恢复备份，恢复前的文件也已保留。"
+            operation.finish()
+        } catch {
+            message = "恢复失败：\(error.localizedDescription)"
+            operation.finish(errorCode: "restore_failed")
+        }
     }
     private func reload() async {
         registrar.removeAll()

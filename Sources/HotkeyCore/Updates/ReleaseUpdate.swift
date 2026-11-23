@@ -3,8 +3,12 @@ import Foundation
 
 public struct UpdateError: LocalizedError {
     let message: String
+    public let diagnosticCode: StaticString?
     public var errorDescription: String? { message }
-    public init(_ message: String) { self.message = message }
+    public init(_ message: String, diagnosticCode: StaticString? = nil) {
+        self.message = message
+        self.diagnosticCode = diagnosticCode
+    }
 }
 
 /// 与平台安装逻辑分开，后续 Windows 可复用版本及 Release 选择规则。

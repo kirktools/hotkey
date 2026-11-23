@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import HotkeyDiagnostics
 import PluginSDK
 
 @MainActor public final class ExternalPlugin: CommandPlugin {
@@ -35,7 +36,7 @@ import PluginSDK
                 self.receive(data)
             }
         }
-        // 持续排空 stderr，防止插件因日志管道写满而挂住。
+        // 第三方插件的 stderr 可能包含原文或凭据，仅读取并丢弃，防止管道写满。
         stderr.fileHandleForReading.readabilityHandler = { handle in
             if handle.availableData.isEmpty { handle.readabilityHandler = nil }
         }
@@ -46,7 +47,10 @@ import PluginSDK
                 self.ready = false
                 self.failPending("插件进程已退出。")
                 self.cleanup()
-                if !expected { self.onFailure?("插件进程意外退出，请停用后重新启用。") }
+                if !expected {
+                    HotkeyDiagnostics.shared.record(.error, module: "plugins", event: "process", errorCode: "unexpected_exit")
+                    self.onFailure?("插件进程意外退出，请停用后重新启用。")
+                }
             }
         }
         process = child
@@ -75,12 +79,18 @@ import PluginSDK
                 if !child.isRunning { break }
                 try? await Task.sleep(nanoseconds: 50_000_000)
             }
-            if child.isRunning { child.terminate() }
+            if child.isRunning {
+                HotkeyDiagnostics.shared.record(.warning, module: "plugins", event: "shutdown", errorCode: "terminate_required")
+                child.terminate()
+            }
             for _ in 0..<10 {
                 if !child.isRunning { break }
                 try? await Task.sleep(nanoseconds: 50_000_000)
             }
-            if child.isRunning { kill(child.processIdentifier, SIGKILL) }
+            if child.isRunning {
+                HotkeyDiagnostics.shared.record(.warning, module: "plugins", event: "shutdown", errorCode: "kill_required")
+                kill(child.processIdentifier, SIGKILL)
+            }
             // 等待内核确认退出后才允许重新启用，避免留下第二个实例。
             while child.isRunning { try? await Task.sleep(nanoseconds: 20_000_000) }
         }
@@ -88,6 +98,13 @@ import PluginSDK
     }
     private func request(_ request: PluginRequest, timeout: Double) async throws {
         guard let child = process, child.isRunning else { throw PluginError.message("插件未运行。") }
+        let event: StaticString
+        switch request.method {
+        case "initialize": event = "initialize"
+        case "shutdown": event = "shutdown"
+        default: event = "invoke"
+        }
+        let started = ContinuousClock.now
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             pending[request.id] = continuation
             do {
@@ -95,6 +112,7 @@ import PluginSDK
                 guard data.count <= PluginProtocol.maximumMessageBytes else { throw PluginError.message("命令参数过大。") }
                 try input?.fileHandleForWriting.write(contentsOf: data)
             } catch {
+                HotkeyDiagnostics.shared.record(.error, module: "plugins", event: event, errorCode: "request_write_failed")
                 pending.removeValue(forKey: request.id)?.resume(throwing: error)
                 return
             }
@@ -102,6 +120,10 @@ import PluginSDK
                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
                 guard let self, self.process === child,
                       let waiting = self.pending.removeValue(forKey: request.id) else { return }
+                let duration = started.duration(to: .now).components
+                HotkeyDiagnostics.shared.record(event.description == "shutdown" ? .warning : .error,
+                                                module: "plugins", event: event, errorCode: "response_timeout",
+                                                elapsedMS: Double(duration.seconds) * 1_000 + Double(duration.attoseconds) / 1e15)
                 waiting.resume(throwing: PluginError.message("插件响应超时。"))
             }
         }
@@ -122,6 +144,7 @@ import PluginSDK
         if buffer.count > PluginProtocol.maximumMessageBytes { protocolFailure() }
     }
     private func protocolFailure() {
+        HotkeyDiagnostics.shared.record(.error, module: "plugins", event: "response", errorCode: "invalid_protocol_message")
         failPending("插件返回了无效协议消息。")
         ready = false
         onFailure?("插件协议错误，已停用进程。")

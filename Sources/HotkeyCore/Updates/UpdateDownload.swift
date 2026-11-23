@@ -98,7 +98,9 @@ public actor UpdateDownload {
         for try await byte in bytes {
             chunk.append(byte)
             total += 1
-            guard total <= limit && total <= asset.size else { throw UpdateError("更新下载超过声明大小。") }
+            guard total <= limit && total <= asset.size else {
+                throw UpdateError("更新下载超过声明大小。", diagnosticCode: "download_size_mismatch")
+            }
             if chunk.count == 65536 {
                 try Task.checkCancellation()
                 try handle.write(contentsOf: chunk)
@@ -106,7 +108,9 @@ public actor UpdateDownload {
             }
         }
         try handle.write(contentsOf: chunk)
-        guard total == asset.size else { throw UpdateError("更新文件大小与 Release 声明不一致。") }
+        guard total == asset.size else {
+            throw UpdateError("更新文件大小与 Release 声明不一致。", diagnosticCode: "download_size_mismatch")
+        }
     }
 
     public func prepare(_ package: ReleasePackage, currentApp: URL) async throws -> PreparedUpdate {
@@ -117,7 +121,11 @@ public actor UpdateDownload {
                 let app = root.appendingPathComponent("extracted/Hotkey.app")
                 let current = try UpdateBundle.inspect(currentApp)
                 let candidate = try UpdateBundle.inspect(app)
-                try candidate.requireCompatible(expected: package.version, currentTeam: current.team, currentCertificate: current.certificate)
+                do {
+                    try candidate.requireCompatible(expected: package.version, currentTeam: current.team, currentCertificate: current.certificate)
+                } catch {
+                    throw UpdateError(error.localizedDescription, diagnosticCode: "bundle_incompatible")
+                }
                 try candidate.applyDownloadReview(to: app, current: current)
             }.value
             try Task.checkCancellation()
@@ -158,9 +166,10 @@ public actor UpdateDownload {
         try await Task.detached {
             let data = try Data(contentsOf: archive)
             guard SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == expected else {
-                throw UpdateError("更新包 SHA-256 不匹配，已拒绝安装。")
+                throw UpdateError("更新包 SHA-256 不匹配，已拒绝安装。", diagnosticCode: "checksum_mismatch")
             }
-            try UpdateZipPolicy.validate(data, root: rootName, required: required)
+            do { try UpdateZipPolicy.validate(data, root: rootName, required: required) }
+            catch { throw UpdateError(error.localizedDescription, diagnosticCode: "archive_invalid") }
             let directory = root.appendingPathComponent("extracted")
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
             _ = try UpdateCommand.run("/usr/bin/ditto", ["-x", "-k", archive.path, directory.path])

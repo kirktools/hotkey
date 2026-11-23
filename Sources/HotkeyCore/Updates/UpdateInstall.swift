@@ -94,7 +94,7 @@ public enum UpdatePaths {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("dev.hotkey.app/Updates", isDirectory: true)
     }
-    public static var receipt: URL { cache.appendingPathComponent("last-result.txt") }
+    static var receipt: URL { cache.appendingPathComponent("last-result.json") }
 
     public static func canInstall(at app: URL) -> Bool {
         let app = app.standardizedFileURL
@@ -104,6 +104,45 @@ public enum UpdatePaths {
             && ["/Applications", homeApps.path].contains(parent.path)
             && app.resolvingSymlinksInPath().path == app.path
             && FileManager.default.isWritableFile(atPath: parent.path)
+    }
+}
+
+/// 更新助手跨进程传递一次安装结果，供下次启动显示。
+public struct UpdateOutcome: Codable {
+    public enum Status: String, Codable {
+        case installed, relaunchFailed, validationFailed, quitTimedOut, replacementFailed
+    }
+
+    public let status: Status
+    let version: ReleaseVersion?
+
+    public var message: String {
+        switch status {
+        case .installed, .relaunchFailed:
+            let installed = version.map { "已更新至 \($0)。" } ?? "已完成更新。"
+            let backup = "旧版备份位于更新缓存的 Backups 目录。"
+            return installed + backup + (status == .relaunchFailed ? " macOS 未能重新打开应用，请在 Finder 中打开。" : "")
+        case .validationFailed: return "上次更新未通过安装前检查。"
+        case .quitTimedOut: return "上次更新未能等到 Hotkey 退出。"
+        case .replacementFailed: return "上次更新未能替换应用。"
+        }
+    }
+
+    public static func takeLatest() -> Self? { take(from: UpdatePaths.receipt) }
+
+    static func take(from url: URL) -> Self? {
+        let fm = FileManager.default
+        guard let info = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+              info.isRegularFile == true, let size = info.fileSize, size < 4096,
+              let data = try? Data(contentsOf: url), let outcome = try? JSONDecoder().decode(Self.self, from: data)
+        else { return nil }
+        try? fm.removeItem(at: url)
+        return outcome
+    }
+
+    fileprivate func save() {
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        try? data.write(to: UpdatePaths.receipt, options: .atomic)
     }
 }
 
@@ -190,6 +229,7 @@ public enum UpdateInstaller {
         let source = root.appendingPathComponent("extracted/Hotkey.app")
         var exited = false
         var destination: URL?
+        var failure: UpdateOutcome.Status = .validationFailed
         do {
             guard try (file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max) < 8192 else {
                 throw UpdateError("更新任务无效。")
@@ -215,24 +255,24 @@ public enum UpdateInstaller {
             while getppid() == job.pid && ProcessInfo.processInfo.systemUptime < deadline {
                 Thread.sleep(forTimeInterval: 0.1)
             }
+            failure = .quitTimedOut
             guard getppid() != job.pid else { throw UpdateError("Hotkey 尚未退出，安装已取消。") }
             exited = true
+            failure = .replacementFailed
             let installedNow = try UpdateBundle.inspect(installed)
             guard installedNow.version == current.version, installedNow.certificate == current.certificate,
                   installedNow.team == current.team else { throw UpdateError("原应用在等待期间发生变化。") }
             try swap(source: source, destination: installed, backupDirectory: UpdatePaths.cache.appendingPathComponent("Backups"),
                      validate: verify)
-            let message = "已更新至 \(job.version)。旧版备份位于更新缓存的 Backups 目录。"
-            try? message.write(to: UpdatePaths.receipt, atomically: true, encoding: .utf8)
+            UpdateOutcome(status: .installed, version: job.version).save()
             do { _ = try UpdateCommand.run("/usr/bin/open", [installed.path]) }
             catch {
-                try? (message + " macOS 未能重新打开应用，请在 Finder 中打开。")
-                    .write(to: UpdatePaths.receipt, atomically: true, encoding: .utf8)
+                UpdateOutcome(status: .relaunchFailed, version: job.version).save()
             }
             try? fm.removeItem(at: root)
             return 0
         } catch {
-            try? ("上次更新失败：" + error.localizedDescription).write(to: UpdatePaths.receipt, atomically: true, encoding: .utf8)
+            UpdateOutcome(status: failure, version: nil).save()
             if exited, let destination { _ = try? UpdateCommand.run("/usr/bin/open", [destination.path]) }
             try? fm.removeItem(at: root)
             return 1

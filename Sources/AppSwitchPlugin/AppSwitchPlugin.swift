@@ -1,4 +1,5 @@
 import AppKit
+import HotkeyDiagnostics
 import PluginSDK
 
 @MainActor public final class AppSwitchPlugin: CommandPlugin {
@@ -11,7 +12,10 @@ import PluginSDK
     public func disable() async {}
     public func execute(command: String, configuration: [String: String]) async throws {
         guard command == "toggle", let identifier = configuration["bundleID"],
-              let path = configuration["path"] else { throw PluginError.message("应用绑定不完整。") }
+              let path = configuration["path"] else {
+            HotkeyDiagnostics.shared.record(.error, module: "app_switch", event: "resolve", errorCode: "invalid_binding")
+            throw PluginError.message("应用绑定不完整。")
+        }
         guard !launching.contains(identifier) else { return }
         let workspace = NSWorkspace.shared
         // 优先使用用户选定的副本；应用被移动后再交给 Launch Services 查找。
@@ -19,12 +23,20 @@ import PluginSDK
         let url: URL
         if Bundle(url: saved)?.bundleIdentifier == identifier { url = saved }
         else if let found = workspace.urlForApplication(withBundleIdentifier: identifier) { url = found }
-        else { throw PluginError.message("找不到 \(configuration["name"] ?? "应用")，请重新添加。") }
+        else {
+            HotkeyDiagnostics.shared.record(.error, module: "app_switch", event: "resolve", errorCode: "application_missing")
+            throw PluginError.message("找不到 \(configuration["name"] ?? "应用")，请重新添加。")
+        }
         let running = workspace.runningApplications.filter {
             $0.bundleIdentifier == identifier && !$0.isTerminated
         }
         if let active = running.first(where: { $0.isActive }) {
-            guard active.hide() else { throw PluginError.message("应用没有接受隐藏请求。") }
+            let operation = HotkeyDiagnostics.shared.begin("app_switch", "hide")
+            guard active.hide() else {
+                operation.finish(errorCode: "hide_rejected")
+                throw PluginError.message("应用没有接受隐藏请求。")
+            }
+            operation.finish()
             return
         }
         launching.insert(identifier)
@@ -37,6 +49,13 @@ import PluginSDK
         options.createsNewApplicationInstance = false
         options.addsToRecentItems = false
         // 打开运行中的应用会走其 reopen 路径，允许目标应用自行恢复窗口。
-        _ = try await workspace.openApplication(at: url, configuration: options)
+        let operation = HotkeyDiagnostics.shared.begin("app_switch", running.isEmpty ? "launch" : "activate")
+        do {
+            _ = try await workspace.openApplication(at: url, configuration: options)
+            operation.finish()
+        } catch {
+            operation.finish(errorCode: "workspace_open_failed")
+            throw error
+        }
     }
 }

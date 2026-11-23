@@ -24,8 +24,8 @@ cp "$bin_path/TranslationPlugin" "$contents/MacOS/"
 cp Plugins/Translation/manifest.json "$plugin/"
 cp LICENSE "$plugin/"
 cp LICENSE "$contents/Resources/"
-cp Vendor/KirkTranslation/LICENSE "$plugin/LICENSE-KirkTranslation"
-cp Vendor/KirkTranslation/LICENSE "$contents/Resources/LICENSE-KirkTranslation"
+./scripts/copy-package-resources.sh "$bin_path" "$contents/Resources" translation
+cp "$contents/Resources"/LICENSE-* "$plugin/"
 python3 - "$plugin" "$contents" "$bundle_id" <<'PY'
 import json, plistlib, sys
 from pathlib import Path

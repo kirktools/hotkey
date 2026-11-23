@@ -1,8 +1,10 @@
 import AppKit
+import HotkeyDiagnostics
+import KirkTranslation
+import KirkTranslationUI
 import NaturalLanguage
 import PluginSDK
 import SwiftUI
-import Translation
 
 @main enum TranslationMain {
     @MainActor static func main() {
@@ -40,10 +42,17 @@ import Translation
 
         readingSelection = true
         defer { readingSelection = false }
+        let operation = HotkeyDiagnostics.shared.begin("translation", "selection")
         let selection = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(returning: Selection.read(from: pid))
             }
+        }
+
+        switch selection {
+        case .text: operation.finish()
+        case .permissionRequired: operation.finish(level: .warning, errorCode: "permission_required")
+        case .unavailable: operation.finish(level: .warning, errorCode: "selection_unavailable")
         }
 
         let panel = window ?? TranslationPanel(
@@ -103,6 +112,8 @@ private final class TranslationPanel: NSPanel {
     @Published var showingAISettings = false
     @Published var isAIResult = false
     @Published var result = ""
+    @Published var pairs: TranslationSentencePairs?
+    private var localOperation: DiagnosticOperation?
     @Published var message: String
     let needsPermission: Bool
 
@@ -111,12 +122,12 @@ private final class TranslationPanel: NSPanel {
         case .text(let text):
             source = text
             if text.count <= Self.limit {
-                request = Request(text: text)
                 message = ""
             } else {
                 message = "选区超过 8,000 字符，请缩短后再翻译。"
             }
             needsPermission = false
+            if text.count <= Self.limit { startLocalRequest(text) }
         case .permissionRequired:
             source = ""
             message = "划词需要辅助功能权限，也可以直接粘贴文本。"
@@ -133,24 +144,62 @@ private final class TranslationPanel: NSPanel {
             showingAISettings = true
             return
         }
-        let text = source.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, text.utf8.count <= 12_000 else {
+        let text = source
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.utf8.count <= 12_000 else {
             message = "原文太长，请缩短后再翻译。"
             return
         }
-        request = nil
+        cancelLocalRequest()
         message = ""
         aiRequest = Request(text: text)
     }
 
     func startTranslation() {
-        let text = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = source
         guard text.count <= Self.limit else {
             message = "原文超过 8,000 字符，请缩短后再翻译。"
             return
         }
         message = ""
+        startLocalRequest(text)
+    }
+
+    private func startLocalRequest(_ text: String) {
+        localOperation = HotkeyDiagnostics.shared.begin("translation", "local")
         request = Request(text: text)
+    }
+
+    func editSource(_ value: String) {
+        guard source != value else { return }
+        cancelLocalRequest()
+        aiRequest = nil
+        source = value
+        result = ""
+        pairs = nil
+        isAIResult = false
+        message = ""
+    }
+
+    func cancelLocalRequest() {
+        localOperation?.finish(level: .info, errorCode: "cancelled")
+        localOperation = nil
+        request = nil
+    }
+
+    func mergeLocal(_ outcome: Result<String, Error>, for completed: Request) {
+        guard request == completed else { return }
+        request = nil
+        switch outcome {
+        case .success(let translated):
+            result = translated
+            pairs = TranslationSentencePairs(original: source, translation: translated)
+            isAIResult = false
+            localOperation?.finish()
+        case .failure(let error):
+            message = "翻译未完成。\(error.localizedDescription)"
+            localOperation?.finish(errorCode: "local_translation_failed")
+        }
+        localOperation = nil
     }
 }
 
@@ -173,32 +222,52 @@ private struct TranslationView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background {
+            if let request = model.request {
+                Group {
+                    if NLLanguageRecognizer.dominantLanguage(for: request.text) == .simplifiedChinese {
+                        Color.clear.task { model.mergeLocal(.success(request.text), for: request) }
+                    } else {
+                        Color.clear.modifier(KirkTranslationUI.SystemTranslation(
+                            text: request.text, target: Locale.Language(identifier: "zh-Hans")
+                        ) { model.mergeLocal($0, for: request) })
+                    }
+                }.id(request.id)
+            }
+        }
         .task(id: model.aiRequest?.id) {
             guard let request = model.aiRequest else { return }
+            let operation = HotkeyDiagnostics.shared.begin("translation", "ai")
+            let segmented = SegmentedTranslation(source: request.text, target: "zh-Hans")
             do {
-                let text = try await aiSettings.translate(request.text)
-                guard !Task.isCancelled, model.aiRequest == request else { return }
-                model.result = text
+                let text = try await aiSettings.translate(segmented.source, segmentMarker: segmented.marker)
+                guard !Task.isCancelled, model.aiRequest == request else {
+                    operation.finish(level: .info, errorCode: "cancelled")
+                    return
+                }
+                let rendered = segmented.render(text)
+                model.result = rendered.text
+                model.pairs = rendered.pairs ?? TranslationSentencePairs(original: request.text, translation: rendered.text)
                 model.isAIResult = true
+                operation.finish()
             } catch {
-                guard !Task.isCancelled, model.aiRequest == request else { return }
+                guard !Task.isCancelled, model.aiRequest == request else {
+                    operation.finish(level: .info, errorCode: "cancelled")
+                    return
+                }
                 model.message = AITranslationSettings.message(for: error)
+                operation.finish(errorCode: "ai_translation_failed")
             }
             model.aiRequest = nil
         }
         .onDisappear {
-            model.request = nil
+            model.cancelLocalRequest()
             model.aiRequest = nil
         }
     }
 
     private var translationForm: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("原文").font(.headline)
-            TextEditor(text: $model.source)
-                .accessibilityLabel("原文")
-                .border(.quaternary)
-                .frame(minHeight: 78)
             HStack {
                 Button("本机翻译", action: model.startTranslation)
                     .disabled(model.request != nil || model.aiRequest != nil || sourceIsEmpty)
@@ -221,64 +290,18 @@ private struct TranslationView: View {
                     .font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
             if !model.message.isEmpty { Text(model.message).foregroundStyle(.secondary) }
-            Text(model.isAIResult ? "AI 译文" : "译文").font(.headline)
-            ScrollView {
-                Text(model.result)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            HStack {
-                Button("关闭") { NSApp.keyWindow?.close() }.keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("复制译文") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(model.result, forType: .string)
-                }.disabled(model.result.isEmpty)
-            }
+            TranslationTextColumns(
+                original: model.source, translation: model.result, originalTitle: "原文",
+                translationTitle: model.isAIResult ? "AI 译文" : "译文", copyTitle: "复制",
+                pairs: model.pairs, approximateAlignmentNote: "句段对应关系为近似匹配。",
+                onOriginalEdit: model.editSource
+            )
+            Button("关闭") { NSApp.keyWindow?.close() }.keyboardShortcut(.cancelAction)
         }
         .padding(18)
-        .background {
-            if let request = model.request {
-                TranslationTaskView(text: request.text) { outcome in
-                    guard model.request == request else { return }
-                    model.request = nil
-                    switch outcome {
-                    case .success(let value):
-                        model.result = value
-                        model.isAIResult = false
-                    case .failure(let error):
-                        model.message = "翻译未完成。\(error.localizedDescription)"
-                    }
-                }
-                .id(request.id)
-            }
-        }
     }
 
     private var sourceIsEmpty: Bool {
         model.source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-}
-
-@available(macOS 15, *)
-private struct TranslationTaskView: View {
-    let text: String
-    let completion: (Result<String, Error>) -> Void
-
-    var body: some View {
-        Color.clear
-            .translationTask(source: nil, target: Locale.Language(identifier: "zh-Hans")) { session in
-                do {
-                    let result: String
-                    if NLLanguageRecognizer.dominantLanguage(for: text) == .simplifiedChinese {
-                        result = text
-                    } else {
-                        result = try await session.translate(text).targetText
-                    }
-                    if !Task.isCancelled { completion(.success(result)) }
-                } catch {
-                    if !Task.isCancelled { completion(.failure(error)) }
-                }
-            }
     }
 }
