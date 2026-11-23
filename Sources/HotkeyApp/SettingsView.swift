@@ -45,6 +45,7 @@ struct SettingsView: View {
             HStack {
                 Text("内置与外部插件共享快捷键管理。").foregroundStyle(.secondary)
                 Spacer()
+                Link("官方插件下载", destination: URL(string: "https://github.com/kirktools/hotkey/releases/latest")!)
                 Button { Task { await model.installPlugin() } } label: { Label("添加插件", systemImage: "plus") }.disabled(model.storageBlocked)
             }.padding(.top, 14)
             ScrollView {
@@ -68,6 +69,7 @@ struct SettingsView: View {
                                     Spacer()
                                     Toggle("启用", isOn: Binding(get: { plugin.enabled }, set: { value in Task { await model.setPluginEnabled(plugin.id, value) } }))
                                         .toggleStyle(.switch).fixedSize()
+                                    Button("更新…") { Task { await model.installPlugin(updating: plugin.id) } }
                                     Button("移除") { Task { await model.removePlugin(plugin.id) } }
                                 }
                                 Text(model.pluginStatus[plugin.id] ?? (plugin.enabled ? "等待启动" : "已停用"))

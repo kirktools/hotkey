@@ -1,6 +1,6 @@
 # 静态官网维护
 
-官网使用原生 HTML/CSS，不使用框架、统计、广告或第三方运行时资源。中文为主，附英文介绍与英文 README。参考同工作区 Screenshot 项目的白名单构建、固定下载别名和 Release → Pages 调用方式；这里保留 Hotkey 的 ZIP、arm64 架构与手动更新规则。
+官网使用原生 HTML/CSS，不使用框架、统计、广告或第三方运行时资源。中文为主，附英文介绍与英文 README。参考同工作区 Screenshot 项目的白名单构建、固定下载别名和 Release → Pages 调用方式；这里保留 Hotkey 的 ZIP、arm64 架构与独立插件打包规则。
 
 ## 本地命令
 
@@ -28,7 +28,7 @@ PORT=4174 make site-preview
 
 `make package` 保留 `Hotkey-<版本>-macos-arm64.zip`，另复制为固定文件名，字节完全一致。示例插件也提供版本名与固定名。两种名称均列入 manifest.json 和 SHA256SUMS，不把校验和当作发布者签名。当前构建只生成本机架构；官网不宣传 Intel 或 Universal 下载。将来增加架构时同时调整页面入口与部署检查。
 
-早期 v0.1.1 没有固定名下载和官网源码；v0.1.2 已包含这些内容。官网独立更新不修改旧 Release 附件。应用内自动更新仍未接入。
+早期 v0.1.1 没有固定名下载和官网源码；v0.1.2 已包含这些内容。官网独立更新不修改旧 Release 附件。早期版本仍可从 Releases 手动更新。
 
 ## GitHub Pages 配置与发布
 

@@ -33,7 +33,7 @@ Hotkey Dev has a separate name, Bundle ID and data directory, an orange DEV icon
 
 ## Limits
 
-Window restoration across minimized windows, fullscreen apps and Spaces follows macOS and the target app. App-specific shortcut conflicts cannot be fully enumerated. External plugins are experimental, including outstanding pipe backpressure and update identity checks; use trusted local plugins only. Screenshot support and in-app automatic updates are not implemented. The current host does not request Accessibility, Input Monitoring or Screen Recording permissions.
+Window restoration across minimized windows, fullscreen apps and Spaces follows macOS and the target app. App-specific shortcut conflicts cannot be fully enumerated. External plugins are experimental, including outstanding pipe backpressure and update identity checks; use trusted local plugins only. Screenshot support is not yet available. Use Check for Updates in the menu bar to install official app updates. External plugin packages are updated separately in Settings. The current host does not request Accessibility, Input Monitoring or Screen Recording permissions.
 
 See [plugin development](docs/plugins.md), [signing and updates](docs/signing-and-updates.md) and [website maintenance](docs/site.md) for details. The website uses only synthetic demo data, with no tracking or external runtime dependencies.
 

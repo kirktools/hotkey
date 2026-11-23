@@ -3,6 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ./scripts/build.sh release
+./scripts/build-translation-plugin.sh release --already-built
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Hotkey.app/Contents/Info.plist)"
 architecture="$(uname -m)"
 if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -12,18 +13,26 @@ fi
 mkdir -p dist/packages
 app_archive="Hotkey-$version-macos-$architecture.zip"
 plugin_archive="NativeMessage-$version-macos-$architecture.zip"
+translation_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Translation.hotkeyplugin/TranslationPlugin.app/Contents/Info.plist)"
+if [[ ! "$translation_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "翻译插件版本必须为 major.minor.patch。" >&2
+  exit 1
+fi
+translation_archive="Translation-$translation_version-macos-$architecture.zip"
+ditto -c -k --keepParent dist/Translation.hotkeyplugin "dist/packages/$translation_archive"
 ditto -c -k --keepParent dist/Hotkey.app "dist/packages/$app_archive"
 ditto -c -k --keepParent dist/NativeMessage.hotkeyplugin "dist/packages/$plugin_archive"
-python3 - "$app_archive" "$plugin_archive" <<'PY'
+python3 - "$app_archive" "$plugin_archive" "$translation_archive" <<'PY'
 import hashlib, json, plistlib, sys, shutil, platform
 from pathlib import Path
 output = Path('dist/packages')
 info = plistlib.loads(Path('dist/Hotkey.app/Contents/Info.plist').read_bytes())
 files = []
 # 固定名称与版本名称共用同一份字节，不重新压缩。
-for source, alias in zip(sys.argv[1:], ('Hotkey-macos-'+platform.machine()+'.zip', 'NativeMessage-macos-'+platform.machine()+'.zip')):
+aliases = [f'{name}-macos-{platform.machine()}.zip' for name in ('Hotkey', 'NativeMessage', 'Translation')]
+for source, alias in zip(sys.argv[1:], aliases):
     shutil.copyfile(output / source, output / alias)
-names = list(sys.argv[1:]) + ['Hotkey-macos-'+platform.machine()+'.zip', 'NativeMessage-macos-'+platform.machine()+'.zip']
+names = sys.argv[1:] + aliases
 for name in names:
     path = output / name
     files.append(dict(name=name, size=path.stat().st_size, sha256=hashlib.sha256(path.read_bytes()).hexdigest()))

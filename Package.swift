@@ -13,7 +13,7 @@ let package = Package(
     dependencies: [.package(path: "Vendor/KirkTranslation")],
     targets: [
         .target(name: "PluginSDK"),
-        .target(name: "HotkeyCore", dependencies: ["PluginSDK"]),
+        .target(name: "HotkeyCore", dependencies: ["PluginSDK"], exclude: ["Updates/LICENSE-Screenshot"]),
         .target(name: "AppSwitchPlugin", dependencies: ["PluginSDK"]),
         .executableTarget(name: "HotkeyApp", dependencies: ["HotkeyCore", "AppSwitchPlugin", "PluginSDK"]),
         .executableTarget(name: "ExamplePlugin", dependencies: ["PluginSDK"]),

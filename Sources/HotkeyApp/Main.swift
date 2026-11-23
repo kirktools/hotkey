@@ -1,9 +1,13 @@
 import AppKit
 import SwiftUI
 import Combine
+import HotkeyCore
 
 @main enum HotkeyMain {
     @MainActor static func main() {
+        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--apply-update" {
+            exit(UpdateInstaller.runHelper(jobPath: CommandLine.arguments[2]))
+        }
         let application = NSApplication.shared
         let delegate = AppDelegate()
         application.delegate = delegate
@@ -16,6 +20,8 @@ import Combine
     private let model = AppModel(builtins: BuiltinAssembly.make())
     private var statusItem: NSStatusItem!
     private var settingsWindow: NSWindow?
+    private var updateWindow: NSWindow?
+    private lazy var updater = AppUpdateModel(app: model)
     private var subscription: AnyCancellable?
     private var quitting = false
     private var terminationSignal: DispatchSourceSignal?
@@ -60,6 +66,9 @@ import Combine
         menu.addItem(summary); menu.addItem(.separator())
         let settings = NSMenuItem(title: "设置…", action: #selector(showSettings), keyEquivalent: ","); settings.target = self
         menu.addItem(settings)
+        let update = NSMenuItem(title: "检查更新…", action: #selector(showUpdates), keyEquivalent: "")
+        update.target = self
+        menu.addItem(update)
         let pause = NSMenuItem(title: model.paused ? "恢复全部快捷键" : "暂停全部快捷键", action: #selector(togglePause), keyEquivalent: "")
         pause.target = self; menu.addItem(pause); menu.addItem(.separator())
         let quit = NSMenuItem(title: "退出 \(model.applicationName)", action: #selector(quit), keyEquivalent: "q"); quit.target = self; menu.addItem(quit)
@@ -76,6 +85,19 @@ import Combine
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
+    @objc private func showUpdates() {
+        if updateWindow == nil {
+            let window = NSWindow(contentViewController: NSHostingController(rootView: AppUpdateView(model: updater)))
+            window.title = "Hotkey · 检查更新"
+            window.isReleasedWhenClosed = false
+            window.center()
+            updateWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        updateWindow?.makeKeyAndOrderFront(nil)
+        if updater.offer == nil { updater.check() }
+    }
+
     @objc private func togglePause() { model.togglePause() }
     @objc private func quit() { NSApp.terminate(nil) }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

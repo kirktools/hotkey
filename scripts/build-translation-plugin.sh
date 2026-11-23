@@ -4,7 +4,9 @@ cd "$(dirname "$0")/.."
 configuration="${1:-debug}"
 case "$configuration" in debug|release) ;; *) echo "CONFIG 必须为 debug 或 release。" >&2; exit 2 ;; esac
 
-./scripts/swift.sh build -c "$configuration" --product TranslationPlugin
+if [[ "${2:-}" != "--already-built" ]]; then
+  ./scripts/swift.sh build -c "$configuration" --product TranslationPlugin
+fi
 bin_path="$(./scripts/swift.sh build -c "$configuration" --show-bin-path)"
 output="dist"
 bundle_id="dev.hotkey.translation-plugin"

@@ -165,31 +165,54 @@ import PluginSDK
         let root = store.pluginsDirectory.appendingPathComponent(id)
         return (try? PluginPackage(root: root).manifest.name) ?? id
     }
-    func installPlugin() async {
-        let picker = NSOpenPanel(); picker.title = "添加本地插件包"; picker.canChooseDirectories = true
-        picker.canChooseFiles = false; picker.treatsFilePackagesAsDirectories = true
+    func installPlugin(updating id: String? = nil) async {
+        guard !busy, !shuttingDown else { return }
+        let picker = NSOpenPanel()
+        picker.title = id == nil ? "添加本地插件包" : "选择新版插件包"
+        picker.canChooseDirectories = true
+        picker.canChooseFiles = false
+        picker.treatsFilePackagesAsDirectories = true
         guard picker.runModal() == .OK, let source = picker.url else { return }
         do {
             let package = try PluginPackage(root: source)
+            if let id, id != package.manifest.id { throw PluginError.message("选择的插件与要更新的插件标识不同。") }
+            let installed = configuration.plugins.first { $0.id == package.manifest.id }
+            if id != nil, installed == nil { throw PluginError.message("该插件已移除。") }
             let confirmation = NSAlert()
-            confirmation.messageText = "添加「\(package.manifest.name)」？"
-            confirmation.informativeText = "版本 \(package.manifest.version)\n此插件包含本机可执行代码，请仅添加可信来源的插件。\n来源：\(source.path)\n\n同标识插件将被替换，快捷键保留。"
-            confirmation.addButton(withTitle: "添加并启用"); confirmation.addButton(withTitle: "取消")
+            if let installed {
+                let current = try PluginPackage(root: store.pluginsDirectory.appendingPathComponent(installed.directory))
+                let notice = try PluginPublisher.replacementNotice(current: current, candidate: package)
+                confirmation.messageText = "替换「\(current.manifest.name)」？"
+                confirmation.informativeText = "版本 \(current.manifest.version) → \(package.manifest.version)\n\(notice)\n来源：\(source.path)\n\n保留启用状态和仍有效的快捷键。"
+                confirmation.addButton(withTitle: "替换")
+            } else {
+                confirmation.messageText = "添加「\(package.manifest.name)」？"
+                confirmation.informativeText = "版本 \(package.manifest.version)\n此插件包含本机可执行代码，请仅添加可信来源的插件。\n来源：\(source.path)"
+                confirmation.addButton(withTitle: "添加并启用")
+            }
+            confirmation.addButton(withTitle: "取消")
             guard confirmation.runModal() == .alertFirstButtonReturn else { return }
-            try await install(from: source)
+            try await install(from: source, expected: package.manifest)
         } catch { message = error.localizedDescription }
     }
-    private func install(from source: URL) async throws {
+    private func install(from source: URL, expected: PluginManifest) async throws {
         guard !busy else { return }; busy = true; defer { busy = false; syncShortcuts() }
         let package = try PluginPackage(root: source), fm = FileManager.default
         try fm.createDirectory(at: store.pluginsDirectory, withIntermediateDirectories: true)
         let staged = store.pluginsDirectory.appendingPathComponent(".stage-\(UUID().uuidString)")
         let destination = store.pluginsDirectory.appendingPathComponent(package.manifest.id)
         let previous = store.pluginsDirectory.appendingPathComponent(".previous-\(UUID().uuidString)")
-        try fm.copyItem(at: package.root, to: staged)
         defer { try? fm.removeItem(at: staged) }
-        _ = try PluginPackage(root: staged)
+        try fm.copyItem(at: package.root, to: staged)
+        let candidate = try PluginPackage(root: staged)
+        guard candidate.manifest == expected else { throw PluginError.message("插件清单在确认后发生变化，请重试。") }
         let oldConfig = configuration
+        let previousConfig = oldConfig.plugins.first { $0.id == candidate.manifest.id }
+        if let previousConfig {
+            let current = try PluginPackage(root: store.pluginsDirectory.appendingPathComponent(previousConfig.directory))
+            _ = try PluginPublisher.replacementNotice(current: current, candidate: candidate)
+        }
+        let enable = previousConfig?.enabled ?? true
         registrar.removeAll()
         await external[package.manifest.id]?.disable(); external[package.manifest.id] = nil
         dispatcher.unregister(package.manifest.id)
@@ -200,15 +223,17 @@ import PluginSDK
             try fm.moveItem(at: staged, to: destination)
             let installed = try PluginPackage(root: destination)
             let adapter = ExternalPlugin(package: installed)
-            external[installed.manifest.id] = adapter
-            try await adapter.enable()
+            if enable {
+                external[installed.manifest.id] = adapter
+                try await adapter.enable()
+            }
             guard !shuttingDown else {
                 await adapter.disable()
                 throw PluginError.message("应用正在退出，已取消插件安装。")
             }
             var next = configuration
             next.plugins.removeAll { $0.id == installed.manifest.id }
-            next.plugins.append(.init(id: installed.manifest.id, directory: installed.manifest.id))
+            next.plugins.append(.init(id: installed.manifest.id, directory: installed.manifest.id, enabled: enable))
             let commandIDs = Set(installed.manifest.commands.map(\.id))
             next.bindings.removeAll { $0.pluginID == installed.manifest.id && !commandIDs.contains($0.command) }
             for command in installed.manifest.commands where !next.bindings.contains(where: { $0.pluginID == installed.manifest.id && $0.command == command.id }) {
@@ -220,9 +245,11 @@ import PluginSDK
                 }
             }
             try persist(next)
-            dispatcher.register(adapter)
-            adapter.onFailure = { [weak self] error in self?.pluginStatus[installed.manifest.id] = error; self?.syncShortcuts() }
-            pluginStatus[installed.manifest.id] = "已就绪"
+            if enable {
+                dispatcher.register(adapter)
+                adapter.onFailure = { [weak self] error in self?.pluginStatus[installed.manifest.id] = error; self?.syncShortcuts() }
+            }
+            pluginStatus[installed.manifest.id] = enable ? "已就绪" : "已停用"
             if hadPrevious { try? fm.removeItem(at: previous) }
         } catch {
             await external[package.manifest.id]?.disable(); external[package.manifest.id] = nil
@@ -270,6 +297,14 @@ import PluginSDK
         external.removeAll(); bindingErrors.removeAll(); pluginStatus.removeAll()
         await start()
     }
+    func beginApplicationUpdate() -> Bool {
+        guard !busy, !recording, !shuttingDown, inFlight.isEmpty else { return false }
+        busy = true
+        return true
+    }
+
+    func endApplicationUpdate() { busy = false }
+
     func shutdown() async {
         shuttingDown = true; registrar.removeAll()
         for plugin in external.values { dispatcher.unregister(plugin.pluginID); await plugin.disable() }
