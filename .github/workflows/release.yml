@@ -31,9 +31,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/packages/* \
-            --repo "$GITHUB_REPOSITORY" --verify-tag \
-            --title "Hotkey ${GITHUB_REF_NAME#v}" --generate-notes
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+
+          output = Path('dist/packages')
+          manifest = output / 'manifest.json'
+          assets = [manifest, output / 'SHA256SUMS']
+          for entry in json.loads(manifest.read_text())['files']:
+              name = entry['name']
+              if Path(name).name != name or not name.startswith(('Hotkey-', 'Plugin-')) or not name.endswith(('.zip', '.dmg')):
+                  raise SystemExit(f'发布附件名称无效：{name}')
+              assets.append(output / name)
+          if not all(asset.is_file() for asset in assets):
+              raise SystemExit('发布附件缺失。')
+          tag = os.environ['GITHUB_REF_NAME']
+          subprocess.run(['gh', 'release', 'create', tag, *map(str, assets),
+                          '--repo', os.environ['GITHUB_REPOSITORY'], '--verify-tag',
+                          '--title', 'Hotkey ' + tag[1:], '--generate-notes'], check=True)
+          PY
 
   website:
     needs: release

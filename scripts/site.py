@@ -29,7 +29,14 @@ class Document(HTMLParser):
         if tag == 'video': self.video.append(attrs)
         if tag in ('script', 'iframe'): raise ValueError('官网不允许脚本或 iframe')
 
+def download_extension():
+    extension = os.environ.get('SITE_DOWNLOAD_EXTENSION', 'zip')
+    if extension not in ('dmg', 'zip'):
+        raise ValueError('下载格式只能是 dmg 或 zip')
+    return extension
+
 def build():
+    extension = download_extension()
     version = plistlib.loads((ROOT/'Resources/Info.plist').read_bytes())['CFBundleShortVersionString']
     tag = os.environ.get('SITE_RELEASE_TAG', '')
     content_only = os.environ.get('SITE_CONTENT_ONLY', '0') == '1'
@@ -48,7 +55,7 @@ def build():
         if source.is_symlink() or not source.resolve().is_relative_to((ROOT/"site").resolve()) or not source.is_file(): raise ValueError('缺少公开文件或文件为符号链接：'+name)
         destination = OUT/name; destination.parent.mkdir(parents=True, exist_ok=True)
         if name.endswith('.html'):
-            destination.write_text(source.read_text().replace('@@VERSION@@', html.escape(tag or version+'（本地预览）')).replace('@@TAG@@', tag or 'master'))
+            destination.write_text(source.read_text().replace('@@VERSION@@', html.escape(tag or version+'（本地预览）')).replace('@@TAG@@', tag or 'master').replace('@@DOWNLOAD_EXTENSION@@', extension))
         else: shutil.copyfile(source, destination)
     (OUT/'.nojekyll').write_text('')
     (OUT/'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: https://kirktools.github.io/hotkey/sitemap.xml\n')
@@ -77,7 +84,7 @@ def check():
         raise ValueError('当前官网 CSS 不允许额外资源或外部依赖')
     if 'lang="zh-CN"' not in text or 'name="viewport"' not in text or 'name="description"' not in text:
         raise ValueError('缺少语言、移动端或简介元信息')
-    expected_download = 'https://github.com/kirktools/hotkey/releases/latest/download/Hotkey-macos-arm64.zip'
+    expected_download = f'https://github.com/kirktools/hotkey/releases/latest/download/Hotkey-macos-arm64.{download_extension()}'
     if ('href', expected_download) not in doc.links: raise ValueError('主下载入口未指向固定正式版文件')
     if doc.icons.get('icon') != 'assets/icon.svg' or doc.icons.get('apple-touch-icon') != 'assets/apple-touch-icon.png' or ('href', 'assets/favicon-32.png') not in doc.links: raise ValueError('缺少浏览器或移动端图标')
     card = doc.metadata.get('og:image', '')

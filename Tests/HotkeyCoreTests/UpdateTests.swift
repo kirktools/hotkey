@@ -60,3 +60,41 @@ struct UpdateTests {
         #expect(try String(contentsOf: extracted.appendingPathComponent("Hotkey.app/version"), encoding: .utf8) == "old")
     }
 }
+
+struct OfficialPluginReleaseTests {
+    private let tag = "v8.0.0"
+
+    private func asset(_ name: String, repository: String = "kirktools/hotkey") -> ReleaseAsset {
+        ReleaseAsset(id: 1, name: name, size: 12,
+                     browser_download_url: URL(string: "https://github.com/\(repository)/releases/download/\(tag)/\(name)")!,
+                     digest: nil)
+    }
+
+    @Test func catalogPrefersVersionedPluginAndSupportsOlderNames() throws {
+        let suffix = "-macos-\(AppRelease.architecture).zip"
+        let legacy = asset("Translation-1.2.0" + suffix)
+        let modern = asset("Plugin-Translation-1.3.0" + suffix)
+        let alias = asset("Plugin-Translation" + suffix)
+        let unrelated = asset("Plugin-Unrelated-99.0.0" + suffix)
+        let sha = asset("SHA256SUMS")
+        for (assets, expected) in [([legacy, alias, unrelated, sha], legacy), ([modern, legacy, alias, sha], modern)] {
+            let release = AppRelease(tag_name: tag, draft: false, prerelease: false, assets: assets)
+            let offers = try release.officialPluginOffers()
+            #expect(offers.count == 1)
+            #expect(offers.first?.archive.archive.name == expected.name)
+            #expect(offers.first?.plugin.id == "dev.hotkey.translation")
+        }
+        let missing = AppRelease(tag_name: tag, draft: false, prerelease: false, assets: [alias, unrelated, sha])
+        #expect(try missing.officialPluginOffers().isEmpty)
+    }
+
+    @Test func catalogRejectsWrongRepositoryAndPrerelease() throws {
+        let name = "Plugin-Translation-1.3.0-macos-\(AppRelease.architecture).zip"
+        let wrongSource = AppRelease(tag_name: tag, draft: false, prerelease: false,
+                                     assets: [asset(name, repository: "other/hotkey"), asset("SHA256SUMS")])
+        #expect(throws: UpdateError.self) { try wrongSource.officialPluginOffers() }
+        let preview = AppRelease(tag_name: tag, draft: false, prerelease: true,
+                                 assets: [asset(name), asset("SHA256SUMS")])
+        #expect(throws: UpdateError.self) { try preview.officialPluginOffers() }
+    }
+}

@@ -53,11 +53,13 @@ jobs:
           release = api('releases/tags/'+tag)
           if release['draft'] or release['prerelease'] or latest['tag_name'] != tag:
               raise SystemExit('仅部署最新已发布的正式版')
-          if 'Hotkey-macos-arm64.zip' not in {a['name'] for a in release['assets']}:
+          assets = {asset['name'] for asset in release['assets']}
+          extension = next((ext for ext in ('dmg', 'zip') if f'Hotkey-macos-arm64.{ext}' in assets), None)
+          if extension is None:
               raise SystemExit('该版本缺少官网所需的固定下载文件')
           source = api('commits/master' if mode == 'website' else 'commits/'+tag)['sha']
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write(f'tag={tag}\nref={source}\n')
+              output.write(f'tag={tag}\nref={source}\ndownload_extension={extension}\n')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write(f'官网模式：{mode}\n\n源码：{source}\n\n应用正式版：{tag}\n')
           PY
@@ -67,6 +69,7 @@ jobs:
           persist-credentials: false
       - name: Build website
         env:
+          SITE_DOWNLOAD_EXTENSION: ${{ steps.source.outputs.download_extension }}
           SITE_RELEASE_TAG: ${{ steps.source.outputs.tag }}
           SITE_CONTENT_ONLY: ${{ inputs.mode == 'website' && '1' || '0' }}
         run: make site-check

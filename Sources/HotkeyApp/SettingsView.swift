@@ -45,7 +45,6 @@ struct SettingsView: View {
             HStack {
                 Text("内置与外部插件共享快捷键管理。").foregroundStyle(.secondary)
                 Spacer()
-                Link("官方插件下载", destination: URL(string: "https://github.com/kirktools/hotkey/releases/latest")!)
                 Button { Task { await model.installPlugin() } } label: { Label("添加插件", systemImage: "plus") }.disabled(model.storageBlocked)
             }.padding(.top, 14)
             ScrollView {
@@ -61,6 +60,7 @@ struct SettingsView: View {
                         }.padding(8)
                     }
                     }
+                    officialPlugins
                     ForEach(model.configuration.plugins) { plugin in
                         GroupBox {
                             VStack(alignment: .leading, spacing: 8) {
@@ -69,7 +69,7 @@ struct SettingsView: View {
                                     Spacer()
                                     Toggle("启用", isOn: Binding(get: { plugin.enabled }, set: { value in Task { await model.setPluginEnabled(plugin.id, value) } }))
                                         .toggleStyle(.switch).fixedSize()
-                                    Button("更新…") { Task { await model.installPlugin(updating: plugin.id) } }
+                                    Button("从文件更新…") { Task { await model.installPlugin(updating: plugin.id) } }
                                     Button("移除") { Task { await model.removePlugin(plugin.id) } }
                                 }
                                 Text(model.pluginStatus[plugin.id] ?? (plugin.enabled ? "等待启动" : "已停用"))
@@ -87,6 +87,53 @@ struct SettingsView: View {
             }
         }.padding(12)
     }
+    private var officialPlugins: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("官方插件", systemImage: "arrow.down.circle").font(.headline)
+                    Spacer()
+                    if model.officialWorking { ProgressView().controlSize(.small) }
+                    Button("检查版本") { Task { await model.checkOfficialPlugins() } }
+                        .disabled(model.officialWorking)
+                }
+                ForEach(OfficialPlugin.allCases) { plugin in
+                    let installed = model.installedVersion(for: plugin)
+                    let offer = model.officialOffers.first { $0.plugin == plugin }
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(plugin.name).fontWeight(.medium)
+                            Text(plugin.summary).font(.caption).foregroundStyle(.secondary)
+                            if let installed { Text("已安装 \(installed)").font(.caption) }
+                            if !plugin.isSupported { Text(plugin.requirement).font(.caption).foregroundStyle(.secondary) }
+                        }
+                        Spacer()
+                        if let offer {
+                            Text("官方版 \(offer.version)").font(.caption).foregroundStyle(.secondary)
+                            if model.canInstall(offer) {
+                                Button(installed == nil ? "安装" : "更新") {
+                                    Task { await model.installOfficialPlugin(offer) }
+                                }
+                                .disabled(model.officialWorking)
+                            }
+                        }
+                    }
+                }
+                if let status = model.officialStatus {
+                    Text(status).font(.caption).foregroundStyle(.secondary)
+                }
+                Text(model.canInstallOfficialPlugins
+                     ? "安装或更新时从 Hotkey 的 GitHub Release 下载。"
+                     : "官方包在正式版安装。开发版可添加本地构建的插件包。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .padding(8)
+        }
+        .task {
+            if model.officialOffers.isEmpty, model.officialStatus == nil { await model.checkOfficialPlugins() }
+        }
+    }
+
     private var general: some View {
         Form {
             Section("快捷键") {

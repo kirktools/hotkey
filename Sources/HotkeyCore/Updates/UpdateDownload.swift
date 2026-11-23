@@ -66,7 +66,7 @@ public actor UpdateDownload {
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         return request
     }
-    public func check(current: ReleaseVersion) async throws -> ReleasePackage? {
+    private func latestRelease() async throws -> AppRelease {
         let url = URL(string: "https://api.github.com/repos/kirktools/hotkey/releases/latest")!
         let (bytes, response) = try await session.bytes(for: request(url))
         guard let http = response as? HTTPURLResponse, UpdateHTTPSPolicy.allowed(http.url) else { throw UpdateError("更新接口响应无效。") }
@@ -76,7 +76,15 @@ public actor UpdateDownload {
             guard data.count < 1024 * 1024 else { throw UpdateError("更新元数据超过大小限制。") }
             data.append(byte)
         }
-        return try JSONDecoder().decode(AppRelease.self, from: data).package(current: current)
+        return try JSONDecoder().decode(AppRelease.self, from: data)
+    }
+
+    public func check(current: ReleaseVersion) async throws -> ReleasePackage? {
+        try await latestRelease().package(current: current)
+    }
+
+    public func officialPluginOffers() async throws -> [OfficialPluginOffer] {
+        try await latestRelease().officialPluginOffers()
     }
 
     private func download(_ asset: ReleaseAsset, to file: URL, limit: Int) async throws {
@@ -102,6 +110,42 @@ public actor UpdateDownload {
     }
 
     public func prepare(_ package: ReleasePackage, currentApp: URL) async throws -> PreparedUpdate {
+        let root = try await extract(package, rootName: "Hotkey.app",
+                                     required: ["Contents/Info.plist", "Contents/MacOS/Hotkey"])
+        do {
+            try await Task.detached {
+                let app = root.appendingPathComponent("extracted/Hotkey.app")
+                let current = try UpdateBundle.inspect(currentApp)
+                let candidate = try UpdateBundle.inspect(app)
+                try candidate.requireCompatible(expected: package.version, currentTeam: current.team, currentCertificate: current.certificate)
+                try candidate.applyDownloadReview(to: app, current: current)
+            }.value
+            try Task.checkCancellation()
+            return PreparedUpdate(root: root, version: package.version)
+        } catch {
+            try? FileManager.default.removeItem(at: root)
+            throw error
+        }
+    }
+
+    public func prepareOfficialPlugin(_ offer: OfficialPluginOffer) async throws -> PreparedOfficialPlugin {
+        let plugin = offer.plugin
+        guard plugin.isSupported else { throw UpdateError(plugin.requirement) }
+        let root = try await extract(offer.archive, rootName: plugin.directory,
+                                     required: ["manifest.json", plugin.executable])
+        do {
+            let package = try await Task.detached {
+                try offer.validatePackage(at: root.appendingPathComponent("extracted/" + plugin.directory))
+            }.value
+            try Task.checkCancellation()
+            return PreparedOfficialPlugin(root: root, package: package)
+        } catch {
+            try? FileManager.default.removeItem(at: root)
+            throw error
+        }
+    }
+
+    private func extract(_ package: ReleasePackage, rootName: String, required: [String]) async throws -> URL {
         let root = cacheRoot.appendingPathComponent("pending-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         var keep = false
@@ -111,20 +155,18 @@ public actor UpdateDownload {
         let expected = try package.expectedHash(String(contentsOf: checksum, encoding: .utf8))
         try await download(package.archive, to: archive, limit: 128 * 1024 * 1024)
         try Task.checkCancellation()
-        let directory = root.appendingPathComponent("extracted")
-        let prepared = try await Task.detached { () throws -> PreparedUpdate in
+        try await Task.detached {
             let data = try Data(contentsOf: archive)
-            guard SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == expected else { throw UpdateError("更新包 SHA-256 不匹配，已拒绝安装。") }
-            try UpdateZipPolicy.validate(data)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            guard SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == expected else {
+                throw UpdateError("更新包 SHA-256 不匹配，已拒绝安装。")
+            }
+            try UpdateZipPolicy.validate(data, root: rootName, required: required)
+            let directory = root.appendingPathComponent("extracted")
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
             _ = try UpdateCommand.run("/usr/bin/ditto", ["-x", "-k", archive.path, directory.path])
-            let app = directory.appendingPathComponent("Hotkey.app")
-            let current = try UpdateBundle.inspect(currentApp)
-            let candidate = try UpdateBundle.inspect(app)
-            try candidate.requireCompatible(expected: package.version, currentTeam: current.team, currentCertificate: current.certificate)
-            try candidate.applyDownloadReview(to: app, current: current)
-            return PreparedUpdate(root: root, version: package.version)
         }.value
-        try Task.checkCancellation(); keep = true; return prepared
+        try Task.checkCancellation()
+        keep = true
+        return root
     }
 }

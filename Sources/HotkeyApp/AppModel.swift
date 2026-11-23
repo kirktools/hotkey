@@ -10,10 +10,14 @@ import PluginSDK
     @Published var message: String?
     @Published private(set) var paused = false
     @Published private(set) var busy = false
+    @Published private(set) var officialOffers: [OfficialPluginOffer] = []
+    @Published private(set) var officialStatus: String?
+    @Published private(set) var officialWorking = false
     @Published private(set) var recording = false
     @Published private(set) var storageBlocked = false
     let store: ConfigurationStore
     private let registrar = HotkeyRegistrar()
+    private let officialDownloads = UpdateDownload()
     let builtins: [any BuiltinPlugin]
     private let dispatcher = CommandDispatcher()
     private var external: [String: ExternalPlugin] = [:]
@@ -165,6 +169,55 @@ import PluginSDK
         let root = store.pluginsDirectory.appendingPathComponent(id)
         return (try? PluginPackage(root: root).manifest.name) ?? id
     }
+    var canInstallOfficialPlugins: Bool { Bundle.main.bundleIdentifier == "dev.hotkey.app" && !storageBlocked }
+
+    func installedVersion(for plugin: OfficialPlugin) -> String? {
+        guard let item = configuration.plugins.first(where: { $0.id == plugin.id }) else { return nil }
+        if let adapter = external[plugin.id] { return adapter.package.manifest.version }
+        let root = store.pluginsDirectory.appendingPathComponent(item.directory)
+        return (try? PluginPackage(root: root).manifest.version) ?? "未知"
+    }
+
+    func canInstall(_ offer: OfficialPluginOffer) -> Bool {
+        guard canInstallOfficialPlugins, offer.plugin.isSupported else { return false }
+        guard let installed = installedVersion(for: offer.plugin) else { return true }
+        guard let current = try? ReleaseVersion(installed) else { return false }
+        return offer.version > current
+    }
+
+    func checkOfficialPlugins() async {
+        guard !officialWorking else { return }
+        officialWorking = true
+        officialOffers = []
+        officialStatus = "正在检查官方插件…"
+        defer { officialWorking = false }
+        do {
+            let offers = try await officialDownloads.officialPluginOffers()
+            officialOffers = offers
+            officialStatus = offers.isEmpty ? "最新正式版暂无适用于当前架构的插件包。" : nil
+        } catch {
+            officialStatus = Task.isCancelled ? nil : error.localizedDescription
+        }
+    }
+
+    func installOfficialPlugin(_ offer: OfficialPluginOffer) async {
+        guard !officialWorking, !busy, !shuttingDown, canInstall(offer) else { return }
+        officialWorking = true
+        officialStatus = "正在下载并校验「\(offer.plugin.name)」…"
+        defer { officialWorking = false }
+        do {
+            let prepared = try await officialDownloads.prepareOfficialPlugin(offer)
+            defer { prepared.clean() }
+            guard !busy, !shuttingDown, canInstall(offer) else {
+                throw UpdateError("插件状态已变化，请检查已安装版本后重试。")
+            }
+            try await install(from: prepared.package.root, expected: prepared.package.manifest)
+            officialStatus = "「\(offer.plugin.name)」\(offer.version) 已安装。"
+        } catch {
+            officialStatus = error.localizedDescription
+        }
+    }
+
     func installPlugin(updating id: String? = nil) async {
         guard !busy, !shuttingDown else { return }
         let picker = NSOpenPanel()

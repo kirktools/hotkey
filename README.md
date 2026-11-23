@@ -37,17 +37,17 @@ make build CONFIG=release
 make package
 ```
 
-开发版和日常使用版均采用免费的 ad-hoc 签名，并检查签名有效性。`make package` 生成带版本、架构和校验清单的本地 ZIP；不提交或发布。未做 Developer ID 签名或公证，下载到其他机器后仍可能遇到系统拦截。参见[签名与更新说明](docs/signing-and-updates.md)。
+开发版和日常使用版均采用免费的 ad-hoc 签名，并检查签名有效性。`make package` 生成带版本、架构和校验清单的本地 DMG 和 ZIP；不提交或发布。未做 Developer ID 签名或公证，下载到其他机器后仍可能遇到系统拦截。参见[签名与更新说明](docs/signing-and-updates.md)。
 
 ## 外部插件
 
 外部插件目前为实验功能，尚有管道背压、更新身份校验等可靠性与安全边界待完善，详见[后续工作](docs/backlog.md)。当前建议仅试用可信的本地插件。
 
-构建同时生成 `dist/NativeMessage.hotkeyplugin`。设置 → 插件 → 添加插件，选择该包，为「显示示例窗口」录入快捷键。停用插件后，窗口与进程都会退出。
+本地构建同时生成开发示例 `dist/NativeMessage.hotkeyplugin`，用来演示外部插件怎样打开窗口。示例不随正式版发布。设置 → 插件 → 添加插件，选择该包，为「显示示例窗口」录入快捷键。停用插件后，窗口与进程都会退出。
 
 外部插件可独立构建和更新，无需重编 Hotkey，也无需另行安装一个顶层应用。只运行可信来源的插件。
 
-划词翻译是可单独安装的插件，需要 macOS 15 或更新版本。运行 `make translation-plugin`，在 Hotkey Dev 的「设置 → 插件」中添加 `dist/dev/Translation.hotkeyplugin`，为「划词翻译为简体中文」绑定快捷键，例如 `⌘⌥T`。日常版插件用 `make translation-plugin CONFIG=release` 构建，包位于 `dist/Translation.hotkeyplugin`。
+划词翻译需要 macOS 15 或更新版本。正式版在「设置 → 插件 → 官方插件」直接安装或更新。开发时运行 `make translation-plugin`，在 Hotkey Dev 的「设置 → 插件」中添加 `dist/dev/Translation.hotkeyplugin`，为「划词翻译为简体中文」绑定快捷键，例如 `⌘⌥T`。日常版插件用 `make translation-plugin CONFIG=release` 构建，包位于 `dist/Translation.hotkeyplugin`。
 
 选中其他应用的文字后按快捷键，译文会出现在浮窗中。划词需要手动授予 macOS 辅助功能权限。应用没有直接提供选区时，插件会尝试调用其菜单中的「复制」，并恢复原剪贴板；系统可能提示允许访问剪贴板。仍读不到时，可把原文粘贴到浮窗中翻译。首次使用 Apple Translation 时，系统可能提示下载语言模型。
 

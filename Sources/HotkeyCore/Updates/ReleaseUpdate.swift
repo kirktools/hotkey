@@ -37,21 +37,30 @@ struct AppRelease: Decodable {
         let version = try self.version
         guard tag_name == "v\(version)" else { throw UpdateError("Release 标签不是标准 vX.Y.Z。") }
         guard version > current else { return nil }
+        let name = "Hotkey-\(version)-macos-\(Self.architecture).zip"
+        return try archive(named: name, version: version)
+    }
+
+    static var architecture: String {
         #if arch(arm64)
-        let arch = "arm64"
+        return "arm64"
         #else
-        let arch = "x86_64"
+        return "x86_64"
         #endif
-        let name = "Hotkey-\(version)-macos-\(arch).zip"
-        func asset(_ name: String, limit: Int) throws -> ReleaseAsset {
-            let matches = assets.filter { $0.name == name }
-            guard matches.count == 1, let asset = matches.first, asset.id > 0, asset.size > 0, asset.size <= limit,
-                  Self.isOfficialDownload(asset.browser_download_url, tag: tag_name, name: name) else {
-                throw UpdateError("正式版缺少有效的 \(name)，或下载地址/大小不符合要求。")
-            }
-            return asset
+    }
+
+    func archive(named name: String, version: ReleaseVersion) throws -> ReleasePackage {
+        ReleasePackage(version: version, tag: tag_name, archive: try asset(name, limit: 128 * 1024 * 1024),
+                       checksums: try asset("SHA256SUMS", limit: 64 * 1024), page: page)
+    }
+
+    private func asset(_ name: String, limit: Int) throws -> ReleaseAsset {
+        let matches = assets.filter { $0.name == name }
+        guard matches.count == 1, let asset = matches.first, asset.id > 0, asset.size > 0, asset.size <= limit,
+              Self.isOfficialDownload(asset.browser_download_url, tag: tag_name, name: name) else {
+            throw UpdateError("正式版缺少有效的 \(name)，或下载地址/大小不符合要求。")
         }
-        return ReleasePackage(version: version, tag: tag_name, archive: try asset(name, limit: 128 * 1024 * 1024), checksums: try asset("SHA256SUMS", limit: 64 * 1024), page: page)
+        return asset
     }
     static func isOfficialDownload(_ url: URL, tag: String, name: String) -> Bool {
         url.scheme == "https" && url.host == "github.com" && url.user == nil && url.password == nil &&
@@ -75,7 +84,7 @@ public struct ReleasePackage {
                   hash.allSatisfy({ $0.isHexDigit && $0.isASCII }) else { return nil }
             return hash
         }
-        guard matches.count == 1 else { throw UpdateError("SHA256SUMS 缺少唯一、有效的应用 ZIP 校验值。") }
+        guard matches.count == 1 else { throw UpdateError("SHA256SUMS 缺少唯一、有效的 ZIP 校验值。") }
         if let digest = archive.digest, digest != "sha256:\(matches[0])" { throw UpdateError("Release 的两份 SHA-256 校验信息不一致。") }
         return matches[0]
     }
@@ -84,7 +93,8 @@ public struct ReleasePackage {
 /// 解压前检查 ZIP 中央目录：拒绝穿越、链接、重复路径、加密及超限包。
 /// 当前发行包没有 Framework 符号链接；将来引入时必须显式扩展验证策略。
 enum UpdateZipPolicy {
-    static func validate(_ data: Data) throws {
+    static func validate(_ data: Data, root expectedRoot: String = "Hotkey.app",
+                         required: [String] = ["Contents/Info.plist", "Contents/MacOS/Hotkey"]) throws {
         guard data.count >= 22, data.count <= 128 * 1024 * 1024 else { throw UpdateError("更新 ZIP 大小无效。") }
         func number(_ offset: Int, _ size: Int) throws -> Int {
             guard offset >= 0 && offset <= data.count - size else { throw UpdateError("更新 ZIP 结构不完整。") }
@@ -109,7 +119,7 @@ enum UpdateZipPolicy {
                   let name = String(data: data.subdata(in: nameStart..<nameStart + nameLength), encoding: .utf8) else { throw UpdateError("更新 ZIP 含不支持的条目。") }
             let parts = name.split(separator: "/", omittingEmptySubsequences: false)
             guard !name.hasPrefix("/"), !name.contains("\\"), !name.contains(":"), !name.unicodeScalars.contains(where: { $0.value < 32 }),
-                  !parts.dropLast().contains(""), !parts.contains(".."), !parts.contains("."), ["Hotkey.app", "__MACOSX"].contains(String(parts.first ?? "")) else { throw UpdateError("更新 ZIP 含不安全路径。") }
+                  !parts.dropLast().contains(""), !parts.contains(".."), !parts.contains("."), [expectedRoot, "__MACOSX"].contains(String(parts.first ?? "")) else { throw UpdateError("更新 ZIP 含不安全路径。") }
             if parts.first != "__MACOSX", let root = parts.first { appRoots.insert(String(root).lowercased()) }
             let local = try number(cursor + 42, 4)
             guard local >= 0 && local < start, try number(local, 4) == 0x04034b50,
@@ -123,6 +133,6 @@ enum UpdateZipPolicy {
             guard total <= 512 * 1024 * 1024 else { throw UpdateError("更新解压内容超过 512 MB 限制。") }
             cursor = next
         }
-        guard cursor == end, appRoots.count == 1, let root = appRoots.first, paths.contains(root + "/contents/info.plist"), paths.contains(root + "/contents/macos/hotkey") else { throw UpdateError("更新 ZIP 缺少应用文件。") }
+        guard cursor == end, appRoots.count == 1, let root = appRoots.first, required.allSatisfy({ paths.contains(root + "/" + $0.lowercased()) }) else { throw UpdateError("更新 ZIP 缺少必要文件。") }
     }
 }
