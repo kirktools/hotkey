@@ -4,9 +4,9 @@
 <meta name="google-site-verification" content="VANGoErtM7QgLXHvufNjDwNaucDNeB_lU3B5hUkixQA" />
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hotkey · 常用应用，一键到达</title>
-<meta name="description" content="Hotkey 是轻量、原生的 macOS 菜单栏快捷键工具。用全局快捷键打开、切换和隐藏应用，配置只保存在本机。">
+<meta name="description" content="Hotkey 是原生 macOS 菜单栏快捷键工具。按键打开、切换或隐藏应用，也能安装官方插件做划词翻译。配置保存在本机。">
 <link rel="canonical" href="https://kirktools.github.io/hotkey/">
-<meta property="og:type" content="website"><meta property="og:title" content="Hotkey · 常用应用，一键到达"><meta property="og:description" content="原生 macOS 菜单栏快捷键工具，配置只存本机。"><meta property="og:url" content="https://kirktools.github.io/hotkey/">
+<meta property="og:type" content="website"><meta property="og:title" content="Hotkey · 常用应用，一键到达"><meta property="og:description" content="用全局快捷键打开、切换和隐藏最常用的 Mac 应用，也可安装官方划词翻译插件。"><meta property="og:url" content="https://kirktools.github.io/hotkey/">
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml" sizes="any">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" sizes="180x180">
@@ -24,25 +24,25 @@
 <section class="hero-copy" aria-label="产品介绍">
 <div class="eyebrow">为 macOS 而造 · 开源 · 本机配置</div>
 <h1>常用应用，<br><span>一键到达。</span></h1>
-<p class="lead">少一次寻找，多一点专注。为常用应用绑定全局快捷键：打开、切到前台，再按一次隐藏。Hotkey 安静地待在菜单栏。</p>
+<p class="lead">给常用应用绑一个全局快捷键。按一下打开或切到前台，再按一下隐藏。想翻译选中的文字，也可以在 Hotkey 里安装官方划词翻译插件。</p>
 <div class="actions"><a class="button" href="https://github.com/kirktools/hotkey/releases/latest/download/Hotkey-macos-arm64.@@DOWNLOAD_EXTENSION@@">下载 macOS 版 <span aria-hidden="true">↓</span></a><a class="secondary" href="https://github.com/kirktools/hotkey/releases">更新日志 / 其他下载 ↗</a></div>
 <p class="caption">macOS 14+ · Apple Silicon（arm64）· 免费 ad-hoc 签名，未公证</p>
 <p class="version">页面对应版本：<strong>@@VERSION@@</strong></p>
 <div class="keyboard" aria-label="建议快捷键前缀 Command 加 Option，加一个自选按键"><kbd>⌘</kbd><kbd>⌥</kbd><span>+</span><kbd class="letter">B</kbd><span class="key-note">你的应用，你的按键。</span></div>
 </section>
 <section id="demo" class="demo" aria-labelledby="demo-title">
-<div class="section-heading"><div><p class="eyebrow">少一步，就顺手一点</p><h2 id="demo-title">从快捷键，到应用。</h2></div><span class="pill">合成数据 · 脚本演示</span></div>
-<video width="1280" height="720" controls playsinline preload="metadata" poster="assets/demo-poster.svg" aria-label="合成演示：绑定快捷键后显示、隐藏示例应用" aria-describedby="demo-note"><source src="assets/demo.webm" type="video/webm"><p>浏览器不支持视频时，可<a href="assets/demo.webm">下载合成演示视频</a>，并查看下方文字说明。</p></video>
-<p id="demo-note" class="caption">演示由脚本绘制，使用虚构应用与绑定，非真实桌面录屏。选择应用 → 录入组合键 → 按键显示 → 再次按键隐藏。可播放、暂停，不自动播放。</p>
+<div class="section-heading"><h2 id="demo-title">快捷键与划词翻译演示</h2><span class="pill">脚本动效</span></div>
+<video width="1280" height="720" controls playsinline preload="none" poster="assets/hotkey-motion-poster.jpg" aria-labelledby="demo-title" aria-describedby="demo-note"><source src="assets/hotkey-motion.mp4" type="video/mp4"><p>浏览器无法播放时，可<a href="assets/hotkey-motion.mp4">下载演示视频</a>。</p></video>
+<p id="demo-note" class="caption">动画使用示例内容演示录入 ⌘⌥B、切换和隐藏应用，以及按 ⌘⌥T 翻译选中的文字。视频配有背景音乐，无旁白。</p>
 </section>
 </div>
 <section id="features" class="wrap features"><div class="section-heading"><div><p class="eyebrow">够轻，也留有余地</p><h2>把高频操作，留给肌肉记忆。</h2></div></div>
 <div class="feature-grid"><article><span class="number">01 / 快捷切换</span><h3>按键到达，再按收起</h3><p>应用未运行时启动；后台时显示；已在前台时隐藏。建议使用 ⌘⌥ 前缀，也支持自定义组合。</p></article><article><span class="number">02 / 原生与本机</span><h3>不必打开另一个工作台</h3><p>Swift、SwiftUI 与 AppKit 构建，常驻菜单栏。配置只存本机，无账号、无统计、无追踪。</p></article><article><span class="number">03 / 清楚的反馈</span><h3>让绑定有迹可查</h3><p>录入时提示内部重复、系统组合及注册冲突。支持暂停快捷键，以及配置导入、导出和备份恢复。</p></article></div>
-<div class="extension"><strong>功能可以扩展，复杂度不必常驻。</strong><p>应用切换是内置插件，也可添加外部原生插件。外部插件目前为实验功能，仅建议试用可信来源；截图功能尚未接入。</p></div>
+<div class="extension"><strong>官方划词翻译插件</strong><p>macOS 15+ 可在「设置 → 插件 → 官方插件」安装划词翻译。绑定快捷键后，选中文字即可调用本机翻译。读取选区需要辅助功能权限。也可添加可信来源的外部插件。</p></div>
 </section>
 <section id="start" class="wrap start"><div><p class="eyebrow">三步开始</p><h2>装好。绑上。按下。</h2><p>系统要求：macOS 14 或更新版本。当前下载为 Apple Silicon 原生包，尚不提供 Intel 或 Universal 构建。</p></div><ol><li><strong>下载并打开</strong><p>打开 DMG 并把 Hotkey 拖入 Applications。如果下载的是 ZIP，解压后将 Hotkey.app 放入应用程序目录。首次打开可能遇到 macOS 安全提示，核实来源后按系统指引操作。</p></li><li><strong>添加常用应用</strong><p>点击菜单栏 ⌘，进入设置，选择一个本机应用。</p></li><li><strong>录入你的快捷键</strong><p>例如 ⌘⌥B；Esc 取消录入。切到其他应用后试用，再按一次隐藏目标应用。</p></li></ol></section>
 <section class="wrap limits" aria-labelledby="limits-title"><h2 id="limits-title">下载前，了解这些边界。</h2><ul><li>免费 ad-hoc 签名不等于 Apple 公证，其他 Mac 首次打开可能被系统拦截。不要求关闭系统安全保护。</li><li>多窗口、最小化、全屏及其他桌面上的恢复遵循系统与目标应用行为，不保证恢复指定窗口。</li><li>无法完整检测其他软件内部快捷键；外部插件的管道背压与截图权限边界仍待完善。</li><li>支持检查更新的版本可从菜单栏更新，其他版本可从 Release 手动下载。宿主不要求辅助功能、输入监控或屏幕录制权限。</li></ul><a href="https://github.com/kirktools/hotkey/blob/@@TAG@@/docs/backlog.md">查看此版本待办 ↗</a></section>
-<section class="wrap english" lang="en"><p class="eyebrow">NATIVE MACOS SHORTCUTS</p><h2>Your everyday apps. One shortcut away.</h2><p>Launch, focus and hide apps from your keyboard. A lightweight menu bar utility built with Swift, with local configuration and an experimental native plugin system.</p><a href="https://github.com/kirktools/hotkey/blob/@@TAG@@/README.en.md">English README ↗</a></section>
+<section class="wrap english" lang="en"><p class="eyebrow">NATIVE MACOS SHORTCUTS</p><h2>Your everyday apps. One shortcut away.</h2><p>Launch, focus and hide apps with global shortcuts. On macOS 15 or later, install the official translation plugin to translate selected text on your Mac.</p><a href="https://github.com/kirktools/hotkey/blob/@@TAG@@/README.en.md">English README ↗</a></section>
 </main>
 <footer class="wrap"><span>⌘ Hotkey · MIT License</span><div><a href="https://github.com/kirktools/hotkey/releases">Releases</a><a href="https://github.com/kirktools/hotkey/issues">反馈问题</a><a href="https://github.com/kirktools/hotkey/blob/@@TAG@@/LICENSE">许可证</a></div></footer>
 </body></html>

@@ -1,8 +1,10 @@
 # Hotkey
 
-English · [简体中文](README.md)
+[Website](https://kirktools.github.io/hotkey/) · [Latest release](https://github.com/kirktools/hotkey/releases/latest) · English · [简体中文](README.md)
 
-A lightweight, native macOS menu bar utility for global keyboard shortcuts. Launch, focus and hide your everyday apps without searching for them. Built with Swift, SwiftUI and AppKit; configuration stays on your Mac, with no account or analytics.
+A native macOS menu bar utility for global shortcuts. Launch, focus and hide apps from your keyboard, or install the official plugin to translate selected text. Configuration stays on your Mac.
+
+[![Play the animated Hotkey demo covering app switching and selected-text translation](site/assets/hotkey-motion-poster.jpg)](https://kirktools.github.io/hotkey/#demo)
 
 ## Features
 
@@ -11,10 +13,11 @@ A lightweight, native macOS menu bar utility for global keyboard shortcuts. Laun
 - Detect internal duplicates, known system combinations and global registration failures.
 - Pause shortcuts, export/import configuration and restore a backup.
 - An internal app-switching plugin and an experimental external native plugin system.
+- On macOS 15 or later, install the official translation plugin from **Settings → Plugins**. Reading selected text requires Accessibility permission.
 
 ## Download and use
 
-Download a ZIP from [GitHub Releases](https://github.com/kirktools/hotkey/releases), unzip it and place Hotkey.app in Applications. Open settings from the menu bar, add an app and record a shortcut.
+Download the DMG from [GitHub Releases](https://github.com/kirktools/hotkey/releases) and drag Hotkey into Applications. If you download the ZIP, extract it and move Hotkey.app to Applications. Open settings from the menu bar, add an app and record a shortcut.
 
 Requires **macOS 14+**. Current release packages target **Apple Silicon / arm64**; Intel and Universal builds are not provided. Builds use free ad-hoc signing and are **not notarized**. macOS may block the first launch; follow its per-app verification process only after checking the source. Do not disable system security protections.
 

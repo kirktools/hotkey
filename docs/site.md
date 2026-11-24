@@ -18,7 +18,7 @@ PORT=4174 make site-preview
 
 ## 演示素材
 
-`site/assets/demo-poster.svg` 和 `demo.webm` 只包含虚构的「示例浏览器」及合成绑定。视频由浏览器 Canvas 脚本绘制并编码，非真实桌面录屏，页面明确标注。可用浏览器打开 `scripts/generate-site-demo.html`，点击按钮重新生成并下载视频；替换公开素材后运行 `make site-check`，无需引入编码工具依赖。原生 video controls 提供播放、暂停，禁止 autoplay；无声视频的内容也以页面文字完整说明。未使用真实聊天、账号、本机路径或截图项目的截图素材。
+`site/assets/hotkey-motion.mp4` 和 `hotkey-motion-poster.jpg` 是公开的脚本动效素材，使用合成界面和示例文字演示快捷键绑定、应用切换和划词翻译。页面视频使用原生控制，不自动播放。背景音乐没有旁白，演示内容也在视频下方用文字说明。替换素材后运行 `make site-check`，再用本地预览检查封面和播放。
 
 ## 下载与校验
 

@@ -2,7 +2,7 @@
 
 [官网](https://kirktools.github.io/hotkey/) · [下载最新版本](https://github.com/kirktools/hotkey/releases/latest) · [English](README.en.md) · 简体中文
 
-轻量的原生 macOS 菜单栏快捷键工具。Swift、SwiftUI、AppKit 实现，无第三方运行时依赖，配置只保存在本机。
+Hotkey 是原生 macOS 菜单栏快捷键工具。按键打开、切换或隐藏常用应用，也可安装官方插件翻译选中的文字。配置保存在本机。
 
 - 为应用绑定全局快捷键：未运行时启动，后台时显示，前台再次触发时隐藏。
 - 建议统一使用 `⌘⌥` 前缀，也可录入其他组合。
@@ -11,7 +11,7 @@
 - 停用外部插件会撤销快捷键并结束其进程。
 - 支持配置导入、导出及上一份有效配置的恢复。
 
-![Hotkey 合成演示封面，非真实桌面录屏](site/assets/demo-poster.svg)
+[![播放 Hotkey 动效演示，展示应用切换与划词翻译](site/assets/hotkey-motion-poster.jpg)](https://kirktools.github.io/hotkey/#demo)
 
 ## 本地运行
 

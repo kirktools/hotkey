@@ -11,7 +11,7 @@ import shutil
 from urllib.parse import urlsplit, unquote
 
 ROOT = Path(__file__).resolve().parent.parent
-FILES = ('index.html', 'assets/style.css', 'assets/demo-poster.svg', 'assets/demo.webm', 'assets/icon.svg', 'assets/favicon-32.png', 'assets/apple-touch-icon.png', 'assets/social-card.png')
+FILES = ('index.html', 'assets/style.css', 'assets/hotkey-motion-poster.jpg', 'assets/hotkey-motion.mp4', 'assets/icon.svg', 'assets/favicon-32.png', 'assets/apple-touch-icon.png', 'assets/social-card.png')
 OUT = ROOT / '.build/site'
 
 class Document(HTMLParser):
@@ -96,8 +96,10 @@ def check():
         if data[:8] != b'\x89PNG\r\n\x1a\n' or struct.unpack('>II', data[16:24]) != dimensions:
             raise ValueError('图标或分享图片尺寸无效：'+name)
     if doc.metadata.get('twitter:card') != 'summary_large_image': raise ValueError('缺少分享卡片类型')
-    if len(doc.video) != 1 or 'controls' not in doc.video[0] or 'autoplay' in doc.video[0] or 'poster' not in doc.video[0]:
+    if len(doc.video) != 1 or 'controls' not in doc.video[0] or 'autoplay' in doc.video[0]:
         raise ValueError('演示视频需要封面、原生控制且禁止自动播放')
+    if doc.video[0].get('poster') != 'assets/hotkey-motion-poster.jpg' or ('src', 'assets/hotkey-motion.mp4') not in doc.links:
+        raise ValueError('演示视频或封面引用不正确')
     print('官网检查通过：资源、图标、分享卡片、锚点、视频控制和发布白名单。')
 
 if __name__ == '__main__':
