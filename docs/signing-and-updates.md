@@ -8,7 +8,9 @@
 | --- | --- | --- |
 | 显示名称 | Hotkey Dev | Hotkey |
 | Bundle ID | `dev.hotkey.app.dev` | `dev.hotkey.app` |
-| 构建产物 | `dist/dev/Hotkey Dev.app` | `dist/Hotkey.app` |
+| 构建产物 | `dist/dev/Hotkey Dev.app` | `dist/release.noindex/Hotkey.app` |
+
+正式版构建目录使用 `.noindex` 后缀，让 Spotlight 跳过打包用的应用副本。
 | 默认数据目录 | `~/Library/Application Support/Hotkey-dev/` | `~/Library/Application Support/Hotkey/` |
 | 签名 | ad-hoc | ad-hoc |
 

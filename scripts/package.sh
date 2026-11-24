@@ -5,7 +5,8 @@ cd "$(dirname "$0")/.."
 ./scripts/build.sh release
 ./scripts/build-translation-plugin.sh release --already-built
 
-version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Hotkey.app/Contents/Info.plist)"
+app="dist/release.noindex/Hotkey.app"
+version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
 translation_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Translation.hotkeyplugin/TranslationPlugin.app/Contents/Info.plist)"
 architecture="$(uname -m)"
 if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ || ! "$translation_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -24,19 +25,19 @@ translation_zip="Plugin-Translation-$translation_version-macos-$architecture.zip
 output="$stage/artifacts"
 
 # DMG 只包含已签名的应用副本和拖放安装入口。
-/usr/bin/ditto dist/Hotkey.app "$payload/Hotkey.app"
+/usr/bin/ditto "$app" "$payload/Hotkey.app"
 ln -s /Applications "$payload/Applications"
 /usr/bin/hdiutil create -format UDZO -fs HFS+ -volname Hotkey -srcfolder "$payload" "$output/$app_dmg"
 /usr/bin/hdiutil verify "$output/$app_dmg"
-/usr/bin/ditto -c -k --keepParent dist/Hotkey.app "$output/$app_zip"
+/usr/bin/ditto -c -k --keepParent "$app" "$output/$app_zip"
 /usr/bin/ditto -c -k --keepParent dist/Translation.hotkeyplugin "$output/$translation_zip"
 
-python3 - "$output" "$architecture" "$app_zip" "$app_dmg" "$translation_zip" <<'PY'
+python3 - "$output" "$app" "$architecture" "$app_zip" "$app_dmg" "$translation_zip" <<'PY'
 import hashlib, json, os, plistlib, shutil, sys
 from pathlib import Path
 
 stage = Path(sys.argv[1])
-arch, app_zip, app_dmg, translation_zip = sys.argv[2:]
+app, arch, app_zip, app_dmg, translation_zip = sys.argv[2:]
 aliases = {
     app_zip: f'Hotkey-macos-{arch}.zip',
     app_dmg: f'Hotkey-macos-{arch}.dmg',
@@ -45,7 +46,7 @@ aliases = {
 for versioned, fixed in aliases.items():
     shutil.copyfile(stage / versioned, stage / fixed)
 
-info = plistlib.loads(Path('dist/Hotkey.app/Contents/Info.plist').read_bytes())
+info = plistlib.loads((Path(app) / 'Contents/Info.plist').read_bytes())
 files = []
 for name in sorted([*aliases, *aliases.values()]):
     path = stage / name

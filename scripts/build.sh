@@ -8,7 +8,7 @@ bin_path="$(./scripts/swift.sh build -c "$configuration" --show-bin-path)"
 if [[ "$configuration" == debug ]]; then
   app="dist/dev/Hotkey Dev.app"
 else
-  app="dist/Hotkey.app"
+  app="dist/release.noindex/Hotkey.app"
 fi
 plugin="dist/NativeMessage.hotkeyplugin"
 mkdir -p .build/tools "$app/Contents/Resources"
