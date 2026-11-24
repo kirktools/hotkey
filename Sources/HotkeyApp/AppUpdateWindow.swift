@@ -70,7 +70,9 @@ import SwiftUI
                     handedOff = true
                     status = "正在退出 Hotkey 并安装…"
                     operation.finish()
-                    NSApp.terminate(nil)
+                    // 延后到当前 Task 离开主队列后再进入 AppKit 的退出循环，
+                    // 让 applicationShouldTerminate 启动的插件清理任务可以运行。
+                    RunLoop.main.perform(inModes: [.common]) { NSApp.terminate(nil) }
                 } catch {
                     failure = "installer_handoff_failed"
                     app.endApplicationUpdate()
