@@ -20,6 +20,7 @@ import SwiftUI
     private var server: PluginServer?
     private var window: TranslationPanel?
     private var readingSelection = false
+    private var requestedAccessibilityPermission = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         server = PluginServer(execute: { [weak self] command, _ in
@@ -70,6 +71,10 @@ import SwiftUI
         window = panel
         panel.orderFrontRegardless()
         panel.makeKey()
+        if case .permissionRequired = selection, !requestedAccessibilityPermission {
+            requestedAccessibilityPermission = true
+            Selection.requestAccessibilityPermission()
+        }
     }
 }
 
@@ -130,7 +135,7 @@ private final class TranslationPanel: NSPanel {
             if text.count <= Self.limit { startLocalRequest(text) }
         case .permissionRequired:
             source = ""
-            message = "划词需要辅助功能权限，也可以直接粘贴文本。"
+            message = ""
             needsPermission = true
         case .unavailable:
             source = ""
@@ -268,6 +273,7 @@ private struct TranslationView: View {
 
     private var translationForm: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if model.needsPermission { selectionPermissionNotice }
             HStack {
                 Button("本机翻译", action: model.startTranslation)
                     .disabled(model.request != nil || model.aiRequest != nil || sourceIsEmpty)
@@ -277,9 +283,6 @@ private struct TranslationView: View {
                     Image(systemName: "gearshape").accessibilityLabel("AI 翻译设置")
                 }
                 .disabled(model.aiRequest != nil)
-                if model.needsPermission, let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                    Button("打开辅助功能设置") { NSWorkspace.shared.open(url) }
-                }
                 Spacer()
                 if model.request != nil || model.aiRequest != nil {
                     ProgressView().controlSize(.small).accessibilityLabel("正在翻译")
@@ -299,6 +302,33 @@ private struct TranslationView: View {
             Button("关闭") { NSApp.keyWindow?.close() }.keyboardShortcut(.cancelAction)
         }
         .padding(18)
+    }
+
+    private var selectionPermissionNotice: some View {
+        let applicationName = Bundle.main.bundleIdentifier?.hasSuffix(".dev") == true ? "Hotkey Dev.app" : "Hotkey.app"
+        return VStack(alignment: .leading, spacing: 8) {
+            Label("无法读取选区：需要辅助功能权限", systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            Text("打开辅助功能设置，启用「\(applicationName)」。如果系统提示显示的是「划词翻译」，则启用该项。然后回到原应用，重新选中文字并按快捷键。")
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("打开辅助功能设置") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                Button("在 Finder 中显示插件") {
+                    NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+                }
+                .help("用于定位插件。系统提示要求添加「划词翻译」时，可从 Finder 选择这份插件。")
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.orange.opacity(0.16), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var sourceIsEmpty: Bool {

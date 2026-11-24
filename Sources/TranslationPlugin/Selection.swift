@@ -4,6 +4,11 @@ import ApplicationServices
 enum Selection: Sendable {
     case text(String), permissionRequired, unavailable
 
+    @MainActor static func requestAccessibilityPermission() {
+        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        _ = AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
+    }
+
     static func read(from pid: pid_t?) -> Self {
         guard AXIsProcessTrusted() else { return .permissionRequired }
         guard let pid else { return .unavailable }
