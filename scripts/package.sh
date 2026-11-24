@@ -6,6 +6,8 @@ cd "$(dirname "$0")/.."
 ./scripts/build-translation-plugin.sh release --already-built
 
 app="dist/release.noindex/Hotkey.app"
+signing=adhoc
+if [[ "${RELEASE_SIGNING_IDENTITY:--}" != "-" ]]; then signing=certificate; fi
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
 translation_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Translation.hotkeyplugin/TranslationPlugin.app/Contents/Info.plist)"
 architecture="$(uname -m)"
@@ -32,12 +34,12 @@ ln -s /Applications "$payload/Applications"
 /usr/bin/ditto -c -k --keepParent "$app" "$output/$app_zip"
 /usr/bin/ditto -c -k --keepParent dist/Translation.hotkeyplugin "$output/$translation_zip"
 
-python3 - "$output" "$app" "$architecture" "$app_zip" "$app_dmg" "$translation_zip" <<'PY'
+python3 - "$output" "$app" "$architecture" "$app_zip" "$app_dmg" "$translation_zip" "$signing" <<'PY'
 import hashlib, json, os, plistlib, shutil, sys
 from pathlib import Path
 
 stage = Path(sys.argv[1])
-app, arch, app_zip, app_dmg, translation_zip = sys.argv[2:]
+app, arch, app_zip, app_dmg, translation_zip, signing = sys.argv[2:]
 aliases = {
     app_zip: f'Hotkey-macos-{arch}.zip',
     app_dmg: f'Hotkey-macos-{arch}.dmg',
@@ -52,7 +54,7 @@ for name in sorted([*aliases, *aliases.values()]):
     path = stage / name
     files.append(dict(name=name, size=path.stat().st_size, sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
 manifest = dict(version=info['CFBundleShortVersionString'], build=info['CFBundleVersion'],
-                bundleIdentifier=info['CFBundleIdentifier'], signing='adhoc', notarized=False, files=files)
+                bundleIdentifier=info['CFBundleIdentifier'], signing=signing, notarized=False, files=files)
 (stage / 'manifest.json').write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + '\n')
 (stage / 'SHA256SUMS').write_text(''.join(f"{file['sha256']}  {file['name']}\n" for file in files))
 

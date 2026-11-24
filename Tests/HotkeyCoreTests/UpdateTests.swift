@@ -3,6 +3,26 @@ import Testing
 @testable import HotkeyCore
 
 struct UpdateTests {
+    @Test func onlyMatchingCertificateAvoidsAddingDownloadQuarantine() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let version = try ReleaseVersion("1.0.0")
+        let signed = UpdateBundle(version: version, minimumOS: version, team: nil, certificate: "same-certificate")
+        let adhoc = UpdateBundle(version: version, minimumOS: version, team: nil, certificate: nil)
+        let attribute = "com.apple.quarantine"
+
+        try signed.applyDownloadReview(to: url, current: signed)
+        let cleanAttributes = try UpdateCommand.run("/usr/bin/xattr", [url.path])
+        #expect(!String(decoding: cleanAttributes, as: UTF8.self).contains(attribute))
+
+        try signed.applyDownloadReview(to: url, current: adhoc)
+        let quarantine = try UpdateCommand.run("/usr/bin/xattr", ["-p", attribute, url.path])
+        #expect(!quarantine.isEmpty)
+        try signed.applyDownloadReview(to: url, current: signed)
+        #expect(try UpdateCommand.run("/usr/bin/xattr", ["-p", attribute, url.path]) == quarantine)
+    }
+
     @Test func updateOutcomeIsReadOnceAndRejectsUnknownStatus() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("hotkey-update-outcome-\(UUID().uuidString)")

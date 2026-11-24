@@ -9,10 +9,10 @@
 | 显示名称 | Hotkey Dev | Hotkey |
 | Bundle ID | `dev.hotkey.app.dev` | `dev.hotkey.app` |
 | 构建产物 | `dist/dev/Hotkey Dev.app` | `dist/release.noindex/Hotkey.app` |
-
-正式版构建目录使用 `.noindex` 后缀，让 Spotlight 跳过打包用的应用副本。
 | 默认数据目录 | `~/Library/Application Support/Hotkey-dev/` | `~/Library/Application Support/Hotkey/` |
 | 签名 | ad-hoc | ad-hoc |
+
+正式版构建目录使用 `.noindex` 后缀，让 Spotlight 跳过打包用的应用副本。
 
 原来的 `Hotkey/` 配置保持在原位置，仍供日常使用版读取；不会自动迁移或覆盖。开发版可按需导入导出的配置，但不要将测试插件和快捷键覆盖进日常配置。
 
@@ -72,3 +72,5 @@ SHA-256 用于检测损坏和核对文件，不是发布者签名。如果更新
 没有配置时明确输出 ad-hoc 提示；一旦指定身份，签名失败立即停止，不静默回退。当前应用不请求敏感权限，因此默认仍可用 ad-hoc 开发。未来引入需要授权的功能前，应先配置固定开发证书并实测授权连续性。脚本不会自动生成证书、操作钥匙串或重置隐私授权；本次未配置固定证书。
 
 发布入口为 `make release BUMP=patch|minor|major`。版本变更、Git 提交及标签推送只发生在该显式命令中，`make package` 始终只生成本地产物。Actions 使用内置 `GITHUB_TOKEN` 发布，不需要本地 gh 登录或付费 Apple 账号。正式包继续使用 ad-hoc 签名。
+
+本地可用 `make package RELEASE_SIGNING_IDENTITY=<证书标识>` 试验固定发布证书，同一身份用于宿主和翻译插件。若身份位于专用钥匙串，可同时传入 `RELEASE_SIGNING_KEYCHAIN=<路径>`。命令沿用已有证书。同证书更新时，更新器保留系统现有的下载隔离标记，并跳过自行添加新标记。首次从 ad-hoc 切换仍可能需要确认打开和重新授权，自签名也仍属于未公证分发。正式 Actions 启用前需另行配置 Hotkey 的发布密钥。

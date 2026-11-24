@@ -15,6 +15,22 @@ if [[ "${2:-release}" == debug ]]; then
     identity="-"
     echo "开发签名：ad-hoc（未配置固定证书；不能保证跨构建保留隐私授权）。"
   fi
+else
+  identity="${RELEASE_SIGNING_IDENTITY:--}"
 fi
-codesign --force --sign "$identity" --timestamp=none --identifier "$bundle_id" "$1"
+options=()
+if [[ "${2:-release}" == release && "$identity" != "-" ]]; then
+  options+=(--options runtime)
+  if [[ -n "${RELEASE_SIGNING_KEYCHAIN:-}" ]]; then
+    options+=(--keychain "$RELEASE_SIGNING_KEYCHAIN")
+  fi
+fi
+codesign --force --sign "$identity" --timestamp=none --identifier "$bundle_id" ${options[@]+"${options[@]}"} "$1"
 codesign --verify --strict "$1"
+if [[ "${2:-release}" == release && "$identity" != "-" ]]; then
+  requirement="$(codesign --display --requirements - "$1" 2>/dev/null)"
+  if [[ "$requirement" != *"certificate "* || "$requirement" == *"cdhash "* ]]; then
+    echo "签名未生成稳定的证书身份要求。" >&2
+    exit 1
+  fi
+fi
