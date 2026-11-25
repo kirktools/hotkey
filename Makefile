@@ -2,7 +2,7 @@
 CONFIG ?= debug
 BUMP ?= patch
 export CONFIG BUMP
-.PHONY: help dev test check build package release-dry-run release translation-plugin
+.PHONY: help dev test check build package release-dry-run release translation-plugin signing-prepare signing-ci
 help:
 	@printf '%s\n' 'make dev | test | check | build [CONFIG=release] | package' 'make release-dry-run [BUMP=patch|minor|major]' 'make release [BUMP=patch|minor|major]' 'make translation-plugin [CONFIG=release]' 'make site | site-check | site-preview'
 dev:
@@ -21,6 +21,10 @@ release-dry-run:
 	@python3 scripts/release.py --dry-run
 release:
 	@python3 scripts/release.py
+signing-prepare:
+	@python3 scripts/release-signing.py prepare
+signing-ci:
+	@python3 scripts/release-signing.py upload
 
 .PHONY: site site-check site-preview
 site:
