@@ -96,6 +96,15 @@ public enum UpdatePaths {
     }
     static var receipt: URL { cache.appendingPathComponent("last-result.json") }
 
+    // 仅用于提示；能否安装仍由 canInstall(at:) 判断。
+    public static func isTranslocated(_ app: URL) -> Bool {
+        let components = app.standardizedFileURL.pathComponents
+        guard let marker = components.lastIndex(of: "AppTranslocation"),
+              components.count == marker + 4,
+              UUID(uuidString: components[marker + 1]) != nil else { return false }
+        return components[marker + 2] == "d" && components[marker + 3] == "Hotkey.app"
+    }
+
     public static func canInstall(at app: URL) -> Bool {
         let app = app.standardizedFileURL
         let parent = app.deletingLastPathComponent()

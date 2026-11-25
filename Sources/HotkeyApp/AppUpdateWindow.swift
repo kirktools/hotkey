@@ -19,6 +19,9 @@ import SwiftUI
     var releasePage: URL { offer?.page ?? URL(string: "https://github.com/kirktools/hotkey/releases")! }
     var installHint: String {
         if Bundle.main.bundleIdentifier != "dev.hotkey.app" { return "开发版继续使用 make dev 更新。" }
+        if UpdatePaths.isTranslocated(Bundle.main.bundleURL) {
+            return "macOS 正从临时位置运行 Hotkey。请退出，再用 Finder 从「应用程序」打开已安装的 Hotkey.app。若尚未安装，请先拖入「应用程序」。"
+        }
         if !canInstall { return "要在应用内安装，请从可写的「应用程序」目录运行 Hotkey.app。" }
         return "更新会备份旧版，退出插件，再替换并重新打开 Hotkey。未公证的版本可能需要在 macOS 中确认打开。"
     }
@@ -95,6 +98,7 @@ struct AppUpdateView: View {
             Text("当前版本 \(model.currentVersion)").foregroundStyle(.secondary)
             Text(model.status).textSelection(.enabled)
             Text(model.installHint).font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             HStack {
                 if model.working { ProgressView().controlSize(.small).accessibilityLabel("更新正在进行") }
                 Spacer()

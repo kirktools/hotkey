@@ -3,6 +3,14 @@ import Testing
 @testable import HotkeyCore
 
 struct UpdateTests {
+    @Test func identifiesTranslocatedAppWithoutAllowingInstall() {
+        let temporary = URL(fileURLWithPath: "/private/var/folders/test/T/AppTranslocation/\(UUID().uuidString)/d/Hotkey.app")
+        #expect(UpdatePaths.isTranslocated(temporary))
+        #expect(!UpdatePaths.canInstall(at: temporary))
+        #expect(!UpdatePaths.isTranslocated(URL(fileURLWithPath: "/Applications/Hotkey.app")))
+        #expect(!UpdatePaths.isTranslocated(URL(fileURLWithPath: "/Users/test/AppTranslocation/Hotkey.app")))
+    }
+
     @Test func onlyMatchingCertificateAvoidsAddingDownloadQuarantine() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
