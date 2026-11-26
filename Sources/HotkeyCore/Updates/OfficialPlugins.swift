@@ -7,7 +7,9 @@ public enum OfficialPlugin: CaseIterable, Identifiable {
     public var name: String { "划词翻译" }
     public var summary: String { "用快捷键翻译选中的文字，支持本机和 AI 翻译。" }
     public var requirement: String { "需要 macOS 15 或更新版本。" }
-    var archiveNames: [String] { ["Plugin-Translation", "Hotkey-Plugin-Translation", "Translation"] }
+    var archiveName: String { "Plugin-Translation" }
+    var archiveNames: [String] { [archiveName, "Hotkey-Plugin-Translation", "Translation"] }
+    var releaseTagPrefix: String { "plugin-translation-v" }
     var directory: String { "Translation.hotkeyplugin" }
     var app: String { "TranslationPlugin.app" }
     var executable: String { "TranslationPlugin.app/Contents/MacOS/TranslationPlugin" }
@@ -59,6 +61,18 @@ public struct PreparedOfficialPlugin {
 }
 
 extension AppRelease {
+    func standalonePluginOffers() throws -> [OfficialPluginOffer] {
+        guard !draft, !prerelease else { return [] }
+        return try OfficialPlugin.allCases.compactMap { plugin in
+            guard tag_name.hasPrefix(plugin.releaseTagPrefix) else { return nil }
+            let value = String(tag_name.dropFirst(plugin.releaseTagPrefix.count))
+            guard let version = try? ReleaseVersion(value), version.description == value else { return nil }
+            let name = "\(plugin.archiveName)-\(version)-macos-\(Self.architecture).zip"
+            guard assets.contains(where: { $0.name == name }) else { return nil }
+            return OfficialPluginOffer(plugin: plugin, archive: try archive(named: name, version: version))
+        }
+    }
+
     func officialPluginOffers() throws -> [OfficialPluginOffer] {
         guard !draft, !prerelease, tag_name == "v\(try version)" else {
             throw UpdateError("官方插件只从正式 Release 提供。")
@@ -78,6 +92,17 @@ extension AppRelease {
                 return OfficialPluginOffer(plugin: plugin, archive: try archive(named: name, version: version))
             }
             return nil
+        }
+    }
+}
+
+extension OfficialPluginOffer {
+    static func newest(legacy: [Self], standalone: [Self]) -> [Self] {
+        OfficialPlugin.allCases.compactMap { plugin in
+            (legacy + standalone).filter { $0.plugin == plugin }.reduce(nil as Self?) { newest, offer in
+                guard let newest, newest.version > offer.version else { return offer }
+                return newest
+            }
         }
     }
 }

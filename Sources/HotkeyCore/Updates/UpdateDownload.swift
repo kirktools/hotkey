@@ -66,17 +66,20 @@ public actor UpdateDownload {
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         return request
     }
-    private func latestRelease() async throws -> AppRelease {
-        let url = URL(string: "https://api.github.com/repos/kirktools/hotkey/releases/latest")!
+    private func releaseMetadata<T: Decodable>(at url: URL, limit: Int = 1024 * 1024) async throws -> T {
         let (bytes, response) = try await session.bytes(for: request(url))
         guard let http = response as? HTTPURLResponse, UpdateHTTPSPolicy.allowed(http.url) else { throw UpdateError("更新接口响应无效。") }
         guard http.statusCode == 200 else { throw UpdateError("检查更新失败（HTTP \(http.statusCode)）。请稍后重试。") }
         var data = Data()
         for try await byte in bytes {
-            guard data.count < 1024 * 1024 else { throw UpdateError("更新元数据超过大小限制。") }
+            guard data.count < limit else { throw UpdateError("更新元数据超过大小限制。") }
             data.append(byte)
         }
-        return try JSONDecoder().decode(AppRelease.self, from: data)
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    private func latestRelease() async throws -> AppRelease {
+        try await releaseMetadata(at: URL(string: "https://api.github.com/repos/kirktools/hotkey/releases/latest")!)
     }
 
     public func check(current: ReleaseVersion) async throws -> ReleasePackage? {
@@ -84,7 +87,20 @@ public actor UpdateDownload {
     }
 
     public func officialPluginOffers() async throws -> [OfficialPluginOffer] {
-        try await latestRelease().officialPluginOffers()
+        async let latest = latestRelease()
+        let standalone = try await standalonePluginOffers()
+        return try await OfficialPluginOffer.newest(legacy: latest.officialPluginOffers(), standalone: standalone)
+    }
+
+    private func standalonePluginOffers() async throws -> [OfficialPluginOffer] {
+        var offers: [OfficialPluginOffer] = []
+        for page in 1...3 {
+            let url = URL(string: "https://api.github.com/repos/kirktools/hotkey/releases?per_page=30&page=\(page)")!
+            let releases: [AppRelease] = try await releaseMetadata(at: url, limit: 2 * 1024 * 1024)
+            offers += try releases.flatMap { try $0.standalonePluginOffers() }
+            if releases.count < 30 { break }
+        }
+        return offers
     }
 
     private func download(_ asset: ReleaseAsset, to file: URL, limit: Int) async throws {

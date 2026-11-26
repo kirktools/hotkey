@@ -1,0 +1,62 @@
+name: Release official plugin
+on:
+  push:
+    tags: ['plugin-translation-v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-plugin-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Validate plugin tag
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          manifest = json.loads(Path('Plugins/Translation/manifest.json').read_text())
+          version = manifest['version']
+          if manifest['id'] != 'dev.hotkey.translation' or manifest['protocolVersion'] != 1:
+              raise SystemExit('独立发布渠道目前只接受协议版本 1 的官方翻译插件。')
+          if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version):
+              raise SystemExit('插件版本无效。')
+          if os.environ['GITHUB_REF_NAME'] != f'plugin-translation-v{version}':
+              raise SystemExit('标签与插件版本不一致。')
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'PLUGIN_VERSION={version}\n')
+          PY
+      - name: Load fixed release certificate
+        env:
+          HOTKEY_RELEASE_P12_BASE64: ${{ secrets.HOTKEY_RELEASE_P12_BASE64 }}
+          HOTKEY_RELEASE_P12_PASSWORD: ${{ secrets.HOTKEY_RELEASE_P12_PASSWORD }}
+        run: python3 scripts/release-signing.py runner
+      - name: Test and package plugin
+        run: |
+          make test
+          make translation-plugin CONFIG=release
+          mkdir -p dist/plugin-release
+          app=dist/Translation.hotkeyplugin/TranslationPlugin.app
+          /usr/bin/codesign --verify --deep --strict "$app"
+          archive="Plugin-Translation-$PLUGIN_VERSION-macos-$(uname -m).zip"
+          /usr/bin/ditto -c -k --keepParent dist/Translation.hotkeyplugin "dist/plugin-release/$archive"
+          (cd dist/plugin-release && shasum -a 256 "$archive" > SHA256SUMS)
+      - name: Publish plugin release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          archive="Plugin-Translation-$PLUGIN_VERSION-macos-$(uname -m).zip"
+          gh release create "$GITHUB_REF_NAME" "dist/plugin-release/$archive" dist/plugin-release/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --latest=false \
+            --title "划词翻译 $PLUGIN_VERSION" --generate-notes
+      - name: Remove release keychain
+        if: always()
+        run: |
+          keychain="$RUNNER_TEMP/hotkey-release-signing/release.keychain-db"
+          if [[ -f "$keychain" ]]; then /usr/bin/security delete-keychain "$keychain"; fi

@@ -108,10 +108,31 @@ struct UpdateTests {
 struct OfficialPluginReleaseTests {
     private let tag = "v8.0.0"
 
-    private func asset(_ name: String, repository: String = "kirktools/hotkey") -> ReleaseAsset {
+    private func asset(_ name: String, repository: String = "kirktools/hotkey", tag releaseTag: String? = nil) -> ReleaseAsset {
         ReleaseAsset(id: 1, name: name, size: 12,
-                     browser_download_url: URL(string: "https://github.com/\(repository)/releases/download/\(tag)/\(name)")!,
+                     browser_download_url: URL(string: "https://github.com/\(repository)/releases/download/\(releaseTag ?? tag)/\(name)")!,
                      digest: nil)
+    }
+
+    @Test func standalonePluginAndLegacyCatalogsChooseHighestVersion() throws {
+        let suffix = "-macos-\(AppRelease.architecture).zip"
+        let legacy = AppRelease(tag_name: tag, draft: false, prerelease: false,
+                                assets: [asset("Plugin-Translation-1.3.0" + suffix), asset("SHA256SUMS")])
+        func standalone(_ version: String, prerelease: Bool = false) -> AppRelease {
+            let pluginTag = "plugin-translation-v" + version
+            return AppRelease(tag_name: pluginTag, draft: false, prerelease: prerelease,
+                              assets: [asset("Plugin-Translation-" + version + suffix, tag: pluginTag),
+                                       asset("SHA256SUMS", tag: pluginTag)])
+        }
+        let bundled = try legacy.officialPluginOffers()
+        let older = try standalone("1.2.0").standalonePluginOffers()
+        let newer = try standalone("1.10.0").standalonePluginOffers()
+        #expect(OfficialPluginOffer.newest(legacy: bundled, standalone: older).first?.archive.tag == tag)
+        #expect(OfficialPluginOffer.newest(legacy: bundled, standalone: newer + older).first?.archive.tag == "plugin-translation-v1.10.0")
+        #expect(try standalone("1.11.0", prerelease: true).standalonePluginOffers().isEmpty)
+        #expect(try standalone("01.11.0").standalonePluginOffers().isEmpty)
+        #expect(try legacy.standalonePluginOffers().isEmpty)
+        #expect(throws: UpdateError.self) { try standalone("1.10.0").package(current: ReleaseVersion("1.0.0")) }
     }
 
     @Test func catalogPrefersVersionedPluginAndSupportsOlderNames() throws {
