@@ -53,7 +53,7 @@ import SwiftUI
         switch selection {
         case .text: operation.finish()
         case .permissionRequired: operation.finish(level: .warning, errorCode: "permission_required")
-        case .unavailable: operation.finish(level: .warning, errorCode: "selection_unavailable")
+        case .unavailable(let reason): operation.finish(level: .warning, errorCode: reason.code)
         }
 
         let panel = window ?? TranslationPanel(
@@ -80,6 +80,17 @@ import SwiftUI
 
 private final class TranslationPanel: NSPanel {
     override var canBecomeKey: Bool { true }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // 非激活面板没有编辑菜单，直接把 ⌘V 交给正在编辑的文本框。
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        if modifiers == .command, event.charactersIgnoringModifiers?.lowercased() == "v",
+           let editor = firstResponder as? NSTextView, editor.isEditable {
+            editor.paste(nil)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
 
     @available(macOS 15, *)
     func showTranslation(_ view: TranslationView) {
@@ -139,7 +150,7 @@ private final class TranslationPanel: NSPanel {
             needsPermission = true
         case .unavailable:
             source = ""
-            message = "未读到选区。可以复制原文，再粘贴到这里。"
+            message = "未读到选区。请在原应用复制文字，再点「粘贴原文」。"
             needsPermission = false
         }
     }
@@ -182,6 +193,16 @@ private final class TranslationPanel: NSPanel {
         result = ""
         pairs = nil
         isAIResult = false
+        message = ""
+    }
+
+    func pasteSource() {
+        guard let text = NSPasteboard.general.string(forType: .string),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            message = "剪贴板中未读到文字。请先在原应用复制文本。"
+            return
+        }
+        editSource(text)
         message = ""
     }
 
@@ -283,6 +304,8 @@ private struct TranslationView: View {
                     Image(systemName: "gearshape").accessibilityLabel("AI 翻译设置")
                 }
                 .disabled(model.aiRequest != nil)
+                Button("粘贴原文", action: model.pasteSource)
+                    .help("用剪贴板中的文字替换原文")
                 Spacer()
                 if model.request != nil || model.aiRequest != nil {
                     ProgressView().controlSize(.small).accessibilityLabel("正在翻译")

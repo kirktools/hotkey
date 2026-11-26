@@ -2,7 +2,20 @@ import AppKit
 import ApplicationServices
 
 enum Selection: Sendable {
-    case text(String), permissionRequired, unavailable
+    enum Unavailability: Sendable {
+        case noFrontmostApp, secureField, copyMenuUnavailable, copyReturnedNoText
+
+        var code: StaticString {
+            switch self {
+            case .noFrontmostApp: return "selection_no_frontmost_app"
+            case .secureField: return "selection_secure_field"
+            case .copyMenuUnavailable: return "selection_copy_menu_unavailable"
+            case .copyReturnedNoText: return "selection_copy_no_text"
+            }
+        }
+    }
+
+    case text(String), permissionRequired, unavailable(Unavailability)
 
     @MainActor static func requestAccessibilityPermission() {
         let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
@@ -11,13 +24,13 @@ enum Selection: Sendable {
 
     static func read(from pid: pid_t?) -> Self {
         guard AXIsProcessTrusted() else { return .permissionRequired }
-        guard let pid else { return .unavailable }
+        guard let pid else { return .unavailable(.noFrontmostApp) }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.4)
         if let focused = element(attribute(app, kAXFocusedUIElementAttribute)) {
             AXUIElementSetMessagingTimeout(focused, 0.4)
             if attribute(focused, kAXSubroleAttribute) as? String == kAXSecureTextFieldSubrole {
-                return .unavailable
+                return .unavailable(.secureField)
             }
             if let text = nonEmptyText(attribute(focused, kAXSelectedTextAttribute)) {
                 return .text(text)
@@ -33,12 +46,12 @@ enum Selection: Sendable {
             }
         }
 
-        guard let menuItem = copyMenuItem(in: app) else { return .unavailable }
+        guard let menuItem = copyMenuItem(in: app) else { return .unavailable(.copyMenuUnavailable) }
         let text = SelectionPasteboard.readByCopying(on: .general) {
             guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return false }
             return AXUIElementPerformAction(menuItem, kAXPressAction as CFString) == .success
         }
-        return text.map(Self.text) ?? .unavailable
+        return text.map(Self.text) ?? .unavailable(.copyReturnedNoText)
     }
 
     private static func copyMenuItem(in app: AXUIElement) -> AXUIElement? {
